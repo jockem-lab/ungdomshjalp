@@ -1,7 +1,6 @@
 // Felsökning: visar om inställningarna finns, utan att visa själva värdena.
-// Med ?kod=<familjekoden> görs också ett litet testanrop till Claude.
+// Med ?test=1 görs också ett litet testanrop till Claude.
 import Anthropic from "@anthropic-ai/sdk";
-import { kodStammer } from "../../../lib/kod";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +8,7 @@ export async function GET(req) {
   const kod = String(process.env.FAMILJEKOD || "");
   const modell = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
   const svar = {
-    version: "6",
+    version: "7",
     miljo: process.env.VERCEL_ENV || null,
     projekt: process.env.VERCEL_PROJECT_PRODUCTION_URL || null,
     familjekod_finns: kod.trim().length > 0,
@@ -18,11 +17,9 @@ export async function GET(req) {
     api_nyckel_langd: String(process.env.ANTHROPIC_API_KEY || "").length,
     modell,
   };
-  const testKod = new URL(req.url).searchParams.get("kod");
-  if (testKod !== null) {
-    if (!kodStammer(testKod)) {
-      svar.claude_test = "Fel familjekod, testet kördes inte.";
-    } else {
+  // ?test=1 gör ett pyttelitet anrop (kostar under en hundradels öre).
+  if (new URL(req.url).searchParams.get("test") !== null) {
+    {
       try {
         const r = await new Anthropic().messages.create({
           model: modell,
