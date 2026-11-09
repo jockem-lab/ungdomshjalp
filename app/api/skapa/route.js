@@ -6,6 +6,7 @@ import { hittaBarn } from "../../../lib/barn";
 import { kodStammer } from "../../../lib/kod";
 import { tvattaAmne, sprakNamn } from "../../../lib/amnen";
 import { arDemo, demoForhor } from "../../../lib/demo";
+import { giltigtNp } from "../../../lib/np";
 
 export const maxDuration = 60; // sekunder, så Vercel hinner vänta på svaret
 
@@ -22,6 +23,11 @@ const FORHOR_SCHEMA = {
       type: "string",
       description: "2–4 meningar om vad materialet handlar om, skrivet direkt till eleven",
     },
+    lastext: {
+      type: "string",
+      description: "En lästext som frågorna bygger på (läsförståelse/hörförståelse). Tom sträng om ingen.",
+    },
+    lastext_sprak: { type: "string", description: "Språkkod för lastext, t.ex. sv-SE eller en-GB. Tom sträng om ingen lästext." },
     nyckelpunkter: {
       type: "array",
       items: { type: "string" },
@@ -61,7 +67,7 @@ const FORHOR_SCHEMA = {
       },
     },
   },
-  required: ["titel", "amne", "sammanfattning", "nyckelpunkter", "fragor"],
+  required: ["titel", "amne", "sammanfattning", "lastext", "lastext_sprak", "nyckelpunkter", "fragor"],
 };
 
 // Olika upplägg beroende på vilket slags ämne barnet har valt.
@@ -82,23 +88,39 @@ function amnesInstruktion(amne) {
   return `Ämnet är "${amne.namn}". Gör ett blandat förhör om det viktigaste i materialet. "nyckelpunkter" får innehålla en kort sammanfattning i punktform. "lasupp" lämnas tom om det inte finns främmande ord.`;
 }
 
-function systemPrompt(barn, lage, amne) {
+// Övningsprov i stil med de nationella proven. Claude skriver egna uppgifter.
+function npInstruktion(np) {
+  const bas = `Gör ett ÖVNINGSPROV inför det nationella provet i ${np.amne} för årskurs ${np.ak}. Skriv egna uppgifter i samma stil och på samma nivå som de nationella proven och kunskapskraven i Lgr22 för åk ${np.ak}. Kopiera aldrig riktiga provuppgifter. Det finns inget fotat material. Gör 12 frågor från lätt till svår.`;
+  if (np.amne === "Svenska") {
+    return `${bas} Skriv en lästext på svenska i "lastext" (åk 3: ca 120 ord, åk 6: ca 300 ord, åk 9: ca 450 ord; berättande eller faktatext), "lastext_sprak" = "sv-SE". Ungefär 8 frågor ska pröva läsförståelse av texten (hitta information, dra slutsatser, tolka), resten språkriktighet, ordförståelse och stavning med korta skrivsvar. "nyckelpunkter" = 2–3 tips för hur man löser läsförståelseuppgifter.`;
+  }
+  if (np.amne === "Engelska") {
+    return `${bas} Skriv en text på engelska i "lastext" (åk 6: ca 200 ord, åk 9: ca 350 ord), "lastext_sprak" = "en-GB". Eleven kan både läsa och lyssna på den. Ungefär 7 frågor ska pröva läs- och hörförståelse av texten, resten ordförråd och grammatik. Frågorna får vara på engelska. Lägg engelska ord som eleven kan behöva höra i "lasupp" med "en-GB". "nyckelpunkter" = 2–3 tips på svenska.`;
+  }
+  if (np.amne === "Matte") {
+    return `${bas} Blanda områdena taluppfattning, algebra, geometri, mätning, statistik och sannolikhet${np.ak === 3 ? " (på åk 3-nivå: tal, enkla räknesätt, mätning, geometriska former, enkla mönster)" : ""}, med några textuppgifter/problemlösning. Använd "skriv" när svaret är ett tal och skriv i frågan vilken enhet som ska anges. Förklaringen visar uträkningen steg för steg. "lastext" tom. "nyckelpunkter" = 3–4 saker att komma ihåg till provet.`;
+  }
+  return `${bas} Utgå från det centrala innehållet i ${np.amne} för åk 7–9. Frågorna ska pröva begrepp, samband och förmåga att resonera, inte bara faktakunskap. Får gärna ha en kort källtext eller ett scenario i "lastext" ("sv-SE") som några frågor bygger på. "nyckelpunkter" = 4–6 centrala begrepp eller samband att kunna.`;
+}
+
+function systemPrompt(barn, lage, amne, np) {
   return `Du är en vänlig och pedagogisk hjälplärare för ${barn.namn}, ${barn.alder} år, i den svenska skolan.
 
 Om ${barn.namn}: ${barn.larstil}
 
 Regler:
-- Du hjälper bara till med skolarbete. Utgå enbart från materialet eleven har fotat.
+- Du hjälper bara till med skolarbete.${np ? "" : " Utgå enbart från materialet eleven har fotat."}
 - Skriv på svenska (utom när själva övningen är på ett annat språk, t.ex. glosor).
 - Anpassa språk och svårighet efter elevens ålder och beskrivningen ovan.
 - Innehållet ska vara lämpligt för barn. Om bilderna inte innehåller skolmaterial: skapa inga frågor, sätt titeln till "Hittade inget skolmaterial" och be vänligt eleven fota en sida ur boken.
 - Syftet är att eleven ska lära sig och träna, inte att få svaren serverade. Ledtrådar ska hjälpa eleven att tänka själv.
 - Frågor av typen "skriv" ska ha korta svar (ett ord, ett tal eller en kort fras) så att de kan rättas automatiskt.
 
-${amnesInstruktion(amne)}
+${np ? npInstruktion(np) : amnesInstruktion(amne)}
 
-Läge: ${
-    lage === "prov"
+${np ? "" : "Läge: "}${
+    np ? ""
+    : lage === "prov"
       ? "PROVTRÄNING. Gör 12 frågor som täcker hela materialet, från lätt till svårt, ungefär som ett riktigt prov."
       : "LÄXFÖRHÖR. Gör 8 frågor som förhör det viktigaste i materialet."
   }`;
@@ -128,12 +150,17 @@ export async function POST(req) {
     return Response.json({ fel: "Bilderna var för stora eller kom inte fram. Prova med färre bilder." }, { status: 400 });
   }
   const { barnId, bilder, lage, anteckning } = body;
-  const amne = tvattaAmne(body.amne);
+  const np = body.np && giltigtNp(Number(body.np.ak), String(body.np.amne))
+    ? { ak: Number(body.np.ak), amne: String(body.np.amne) }
+    : null;
+  const amne = np
+    ? { namn: `Nationellt prov ${np.amne}`, typ: np.amne === "Engelska" ? "sprak" : "annat", sprak: np.amne === "Engelska" ? "en-GB" : "" }
+    : tvattaAmne(body.amne);
 
   // Testläge: påhittat förhör, Claude anropas inte.
   if (arDemo(body.kod)) {
     await new Promise((r) => setTimeout(r, 1500));
-    return Response.json(demoForhor(amne));
+    return Response.json(demoForhor(amne, np));
   }
 
   // Enkel familjekod så att inte vem som helst kan använda er API-nyckel.
@@ -147,11 +174,12 @@ export async function POST(req) {
   }
   const barn = hittaBarn(barnId);
   if (!barn) return Response.json({ fel: "Okänt barn." }, { status: 400 });
-  if (!Array.isArray(bilder) || bilder.length === 0 || bilder.length > 6) {
+  const bildLista = Array.isArray(bilder) ? bilder : [];
+  if (!np && (bildLista.length === 0 || bildLista.length > 6)) {
     return Response.json({ fel: "Skicka mellan 1 och 6 bilder." }, { status: 400 });
   }
 
-  const innehall = bilder.map((dataUrl) => ({
+  const innehall = bildLista.slice(0, 6).map((dataUrl) => ({
     type: "image",
     source: {
       type: "base64",
@@ -162,7 +190,7 @@ export async function POST(req) {
   innehall.push({
     type: "text",
     text:
-      "Här är mitt material." +
+      (np ? `Gör mitt övningsprov i ${np.amne} för åk ${np.ak}.` : "Här är mitt material.") +
       (anteckning ? ` Det här vill jag träna på: ${String(anteckning).slice(0, 300)}` : ""),
   });
 
@@ -171,7 +199,7 @@ export async function POST(req) {
     const svar = await client.messages.create({
       model: MODELL,
       max_tokens: 8000,
-      system: systemPrompt(barn, lage, amne),
+      system: systemPrompt(barn, lage, amne, np),
       output_config: { format: { type: "json_schema", schema: FORHOR_SCHEMA } },
       messages: [{ role: "user", content: innehall }],
     });

@@ -80,3 +80,4 @@ label.etikett { display: flex; flex-direction: column; gap: 6px; font-weight: 80
 .rad .liten-knapp { white-space: nowrap; }
 select.falt { appearance: auto; }
 .testband { background: #1F2937; color: #FDE68A; text-align: center; font-size: 13px; font-weight: 700; padding: 8px 12px; }
+.lastext { white-space: pre-line; font-size: 17px; line-height: 1.55; }
