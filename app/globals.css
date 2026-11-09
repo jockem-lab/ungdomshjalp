@@ -1,0 +1,74 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #FAFAF7;
+  color: #1F2937;
+  font-family: ui-rounded, "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+button, input, textarea { font-family: inherit; font-size: inherit; }
+button { cursor: pointer; }
+button:disabled { opacity: 0.55; cursor: default; }
+
+.app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+.sida { padding: 32px 20px 28px; display: flex; flex-direction: column; gap: 18px; flex: 1; }
+.liten-rubrik { margin: 0; font-size: 13px; font-weight: 700; color: #4B5563; letter-spacing: 0.05em; text-transform: uppercase; }
+h1 { margin: 0; font-size: 30px; font-weight: 800; line-height: 1.15; }
+h2 { margin: 4px 0 0; font-size: 17px; font-weight: 800; color: #374151; }
+p { margin: 0; line-height: 1.45; }
+.dov { color: #4B5563; font-size: 14px; }
+.fel { background: #FEE2E2; color: #7F1D1D; padding: 12px 14px; border-radius: 12px; font-size: 15px; }
+
+.knapp {
+  border: 0; border-radius: 16px; padding: 16px; font-size: 17px; font-weight: 800;
+  min-height: 56px; background: #1F2937; color: #fff; display: flex; align-items: center;
+  justify-content: center; gap: 10px;
+}
+.knapp.ram { background: #fff; color: #1F2937; border: 2px solid #D1D5DB; }
+.pill {
+  align-self: flex-start; background: #fff; border: 1px solid #D1D5DB; border-radius: 999px;
+  padding: 8px 14px; font-size: 14px; font-weight: 700; min-height: 38px; color: #1F2937;
+}
+.falt { font-size: 17px; padding: 14px; border: 1px solid #D1D5DB; border-radius: 12px; width: 100%; background: #fff; }
+label.etikett { display: flex; flex-direction: column; gap: 6px; font-weight: 800; font-size: 15px; }
+
+.barnknapp {
+  display: flex; align-items: center; gap: 16px; padding: 14px 16px; border-radius: 18px;
+  background: #fff; text-align: left; min-height: 72px; border: 2px solid;
+}
+.avatar {
+  width: 48px; height: 48px; border-radius: 50%; color: #fff; display: flex; align-items: center;
+  justify-content: center; font-size: 22px; font-weight: 800; flex-shrink: 0;
+}
+
+.topp { color: #fff; padding: 28px 20px 24px; display: flex; flex-direction: column; gap: 10px; border-radius: 0 0 28px 28px; }
+.topp .pill { background: rgba(255,255,255,0.2); color: #fff; border: 0; }
+
+.kort { background: #fff; border: 1px solid #E5E7EB; border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.amne { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+.rad { display: flex; gap: 8px; flex-wrap: wrap; }
+.rad > * { flex: 1 1 0; }
+.liten-knapp { border-radius: 12px; padding: 10px 8px; font-size: 15px; font-weight: 800; min-height: 44px; border: 0; color: #1F2937; }
+.tabort { background: none; border: 0; color: #6B7280; font-size: 13px; text-decoration: underline; align-self: flex-end; padding: 4px; }
+
+.fotoyta {
+  border-radius: 20px; border: 3px dashed; min-height: 180px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px; padding: 16px; text-align: center; font-weight: 700;
+}
+.miniatyrer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.miniatyrer div { position: relative; }
+.miniatyrer img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; display: block; }
+.miniatyrer button { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(0,0,0,0.6); color: #fff; font-weight: 800; }
+
+.stapel { height: 10px; border-radius: 999px; background: #E5E7EB; overflow: hidden; }
+.stapel div { height: 100%; border-radius: 999px; transition: width 0.3s; }
+.fraga { font-size: 21px; font-weight: 800; line-height: 1.3; }
+.alt { text-align: left; padding: 15px 16px; border-radius: 14px; font-size: 17px; font-weight: 700; min-height: 54px; border: 2px solid #E5E7EB; background: #fff; color: #1F2937; }
+.alt.ratt { background: #DCFCE7; border-color: #15803D; }
+.alt.fel-val { background: #FFEDD5; border-color: #C2410C; }
+.svar { border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.svar.ratt { background: #DCFCE7; }
+.svar.fel-val { background: #FFEDD5; }
+.ledtrad { background: #FEF9C3; border-radius: 12px; padding: 12px 14px; font-size: 15px; }
+.laddar { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 40px 0; text-align: center; }
+.snurra { width: 48px; height: 48px; border-radius: 50%; border: 5px solid #E5E7EB; animation: snurr 0.9s linear infinite; }
+@keyframes snurr { to { transform: rotate(360deg); } }
