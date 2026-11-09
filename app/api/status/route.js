@@ -4,7 +4,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const kod = String(process.env.FAMILJEKOD || "");
   return Response.json({
-    version: "4",
+    version: "5",
+    miljo: process.env.VERCEL_ENV || null,
+    bygg_adress: process.env.VERCEL_URL || null,
+    projekt: process.env.VERCEL_PROJECT_PRODUCTION_URL || null,
     familjekod_finns: kod.trim().length > 0,
     familjekod_antal_tecken: kod.trim().length,
     api_nyckel_finns: Boolean(process.env.ANTHROPIC_API_KEY),
