@@ -278,13 +278,22 @@ function Fota({ barn, kod, onTillbaka, onKlar, onFelKod }) {
     <main className="app">
       <div className="sida">
         <button className="pill" onClick={onTillbaka}>Tillbaka</button>
-        <h1>Fota sidan eller glosorna</h1>
-        <label className="fotoyta" style={{ borderColor: barn.farg, background: barn.ljus }}>
-          <KameraIkon storlek={40} />
-          {bilder.length === 0 ? "Tryck för att fota" : "Lägg till fler bilder"}
-          <span className="dov">Högst 6 bilder</span>
-          <input type="file" accept="image/*" capture="environment" multiple onChange={laggTill} style={{ display: "none" }} />
-        </label>
+        <h1>Lägg till ditt material</h1>
+        <div className="rad">
+          <label className="fotoyta" style={{ borderColor: barn.farg, background: barn.ljus }}>
+            <KameraIkon storlek={36} />
+            Ta foto
+            <input type="file" accept="image/*" capture="environment" onChange={laggTill} style={{ display: "none" }} />
+          </label>
+          <label className="fotoyta" style={{ borderColor: barn.farg, background: barn.ljus }}>
+            <BildIkon storlek={36} />
+            Välj bilder
+            <input type="file" accept="image/*" multiple onChange={laggTill} style={{ display: "none" }} />
+          </label>
+        </div>
+        <p className="dov" style={{ textAlign: "center" }}>
+          {bilder.length === 0 ? "Fota direkt eller välj bilder du redan har, t.ex. skärmdumpar." : `${bilder.length} av högst 6 bilder`}
+        </p>
         {bilder.length > 0 && (
           <div className="miniatyrer">
             {bilder.map((b, i) => (
@@ -414,6 +423,16 @@ function Forhor({ barn, forhor, onKlar, onAvbryt }) {
         )}
       </div>
     </main>
+  );
+}
+
+function BildIkon({ storlek = 24 }) {
+  return (
+    <svg width={storlek} height={storlek} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
   );
 }
 
