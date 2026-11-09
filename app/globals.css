@@ -72,3 +72,10 @@ label.etikett { display: flex; flex-direction: column; gap: 6px; font-weight: 80
 .laddar { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 40px 0; text-align: center; }
 .snurra { width: 48px; height: 48px; border-radius: 50%; border: 5px solid #E5E7EB; animation: snurr 0.9s linear infinite; }
 @keyframes snurr { to { transform: rotate(360deg); } }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 2px solid; border-radius: 999px; padding: 9px 15px; font-size: 15px; font-weight: 700; min-height: 44px; }
+.typval { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; border: 2px solid; border-radius: 14px; color: #1F2937; min-height: 56px; }
+.punkter { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 17px; line-height: 1.4; }
+.rad .liten-knapp { white-space: nowrap; }
+select.falt { appearance: auto; }

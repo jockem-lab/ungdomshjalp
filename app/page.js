@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { BARN, hittaBarn } from "../lib/barn";
+import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
 
 function lasLagrat(nyckel, standard) {
   try {
@@ -38,12 +39,14 @@ function krympBild(fil, maxSida = 1280) {
   });
 }
 
-function lasUpp(text) {
+function lasUpp(text, sprak = "sv-SE") {
   try {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = "sv-SE";
-    u.rate = 0.95;
+    u.lang = sprak || "sv-SE";
+    const rost = window.speechSynthesis.getVoices().find((v) => v.lang.replace("_", "-").startsWith(u.lang.slice(0, 2)));
+    if (rost) u.voice = rost;
+    u.rate = sprak && sprak !== "sv-SE" ? 0.85 : 0.95;
     window.speechSynthesis.speak(u);
   } catch {}
 }
@@ -59,6 +62,7 @@ export default function App() {
   const [skarm, setSkarm] = useState("valj");
   const [material, setMaterial] = useState([]);
   const [aktivt, setAktivt] = useState(null); // förhöret som körs
+  const [amnen, setAmnen] = useState(STANDARD_AMNEN);
 
   useEffect(() => {
     setKod(lasLagrat("familjekod", null));
@@ -66,8 +70,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (barnId) setMaterial(lasLagrat(`material-${barnId}`, []));
+    if (barnId) {
+      setMaterial(lasLagrat(`material-${barnId}`, []));
+      setAmnen(lasLagrat(`amnen-${barnId}`, STANDARD_AMNEN));
+    }
   }, [barnId]);
+
+  function uppdateraAmnen(lista) {
+    setAmnen(lista);
+    sparaLagrat(`amnen-${barnId}`, lista);
+  }
 
   function uppdateraMaterial(lista) {
     setMaterial(lista);
@@ -93,6 +105,8 @@ export default function App() {
       <Fota
         barn={barn}
         kod={kod}
+        amnen={amnen}
+        onNyttAmne={(a) => uppdateraAmnen([...amnen, a])}
         onTillbaka={() => setSkarm("hem")}
         onKlar={(nytt) => {
           uppdateraMaterial([nytt, ...material]);
@@ -121,10 +135,23 @@ export default function App() {
     );
   }
 
+  if (skarm === "amnen") {
+    return (
+      <Amnen
+        barn={barn}
+        amnen={amnen}
+        onTillbaka={() => setSkarm("hem")}
+        onLaggTill={(a) => uppdateraAmnen([...amnen, a])}
+        onTaBort={(id) => uppdateraAmnen(amnen.filter((a) => a.id !== id))}
+      />
+    );
+  }
+
   return (
     <Hem
       barn={barn}
       material={material}
+      onAmnen={() => setSkarm("amnen")}
       onByt={() => setSkarm("valj")}
       onFota={() => setSkarm("fota")}
       onStarta={(m) => { setAktivt(m); setSkarm("forhor"); }}
@@ -191,7 +218,15 @@ function Valj({ onVal, onLoggaUt }) {
   );
 }
 
-function Hem({ barn, material, onByt, onFota, onStarta, onTaBort }) {
+function amnesEtikett(m) {
+  return m.amneNamn || m.amne || "Övrigt";
+}
+
+function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen }) {
+  const [filter, setFilter] = useState(null);
+  const amnesNamn = [...new Set(material.map(amnesEtikett))];
+  const visade = filter ? material.filter((m) => amnesEtikett(m) === filter) : material;
+
   return (
     <main className="app">
       <div className="topp" style={{ background: barn.farg }}>
@@ -203,11 +238,22 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort }) {
         <button className="knapp" onClick={onFota}>
           <KameraIkon /> Fota nytt material
         </button>
-        <h2>Mina hjälplärare</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <h2>Mina hjälplärare</h2>
+          <button className="tabort" style={{ alignSelf: "auto" }} onClick={onAmnen}>Mina ämnen</button>
+        </div>
+        {amnesNamn.length > 1 && (
+          <div className="chips">
+            <Chip aktiv={!filter} farg={barn.farg} onClick={() => setFilter(null)}>Alla</Chip>
+            {amnesNamn.map((n) => (
+              <Chip key={n} aktiv={filter === n} farg={barn.farg} onClick={() => setFilter(n)}>{n}</Chip>
+            ))}
+          </div>
+        )}
         {material.length === 0 && <p className="dov">Här hamnar allt du fotar. Börja med knappen ovanför.</p>}
-        {material.map((m) => (
+        {visade.map((m) => (
           <div className="kort" key={m.id}>
-            <span className="amne" style={{ color: barn.farg }}>{m.amne} · {m.lage === "prov" ? "Provträning" : "Läxförhör"}</span>
+            <span className="amne" style={{ color: barn.farg }}>{amnesEtikett(m)} · {m.lage === "prov" ? "Provträning" : "Läxförhör"}</span>
             <span style={{ fontSize: 18, fontWeight: 800 }}>{m.titel}</span>
             <span className="dov">
               {m.fragor.length} frågor
@@ -226,12 +272,100 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort }) {
   );
 }
 
-function Fota({ barn, kod, onTillbaka, onKlar, onFelKod }) {
+function Chip({ aktiv, farg, onClick, children }) {
+  return (
+    <button type="button" className="chip" onClick={onClick}
+      style={{ background: aktiv ? farg : "#fff", color: aktiv ? "#fff" : "#1F2937", borderColor: farg }}>
+      {children}
+    </button>
+  );
+}
+
+// Formulär för att skapa ett eget ämne.
+function NyttAmne({ barn, onSpara, onAvbryt }) {
+  const [namn, setNamn] = useState("");
+  const [typ, setTyp] = useState("lasamne");
+  const [sprak, setSprak] = useState("en-GB");
+
+  function spara(e) {
+    e.preventDefault();
+    if (!namn.trim()) return;
+    onSpara({
+      id: Date.now().toString(36),
+      namn: namn.trim().slice(0, 40),
+      typ,
+      sprak: typ === "sprak" ? sprak : "",
+    });
+  }
+
+  return (
+    <form className="kort" onSubmit={spara} style={{ borderColor: barn.farg, borderWidth: 2 }}>
+      <label className="etikett">
+        Vad heter ämnet?
+        <input className="falt" value={namn} onChange={(e) => setNamn(e.target.value)} placeholder="t.ex. Spanska, Historia, Biologi" autoFocus />
+      </label>
+      <span style={{ fontWeight: 800, fontSize: 15 }}>Vilken sorts ämne?</span>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {Object.entries(TYPER).map(([id, t]) => (
+          <button type="button" key={id} className="typval" onClick={() => setTyp(id)}
+            style={{ borderColor: typ === id ? barn.farg : "#E5E7EB", background: typ === id ? barn.ljus : "#fff" }}>
+            <strong>{t.namn}</strong>
+            <span className="dov">{t.info}</span>
+          </button>
+        ))}
+      </div>
+      {typ === "sprak" && (
+        <label className="etikett">
+          Vilket språk? (för uppläsning)
+          <select className="falt" value={sprak} onChange={(e) => setSprak(e.target.value)}>
+            {SPRAK.map((s) => <option key={s.kod} value={s.kod}>{s.namn}</option>)}
+          </select>
+        </label>
+      )}
+      <div className="rad">
+        <button type="button" className="liten-knapp" style={{ background: "#F3F4F6" }} onClick={onAvbryt}>Avbryt</button>
+        <button className="liten-knapp" style={{ background: barn.farg, color: "#fff" }} disabled={!namn.trim()}>Spara ämnet</button>
+      </div>
+    </form>
+  );
+}
+
+function Amnen({ barn, amnen, onTillbaka, onLaggTill, onTaBort }) {
+  const [ny, setNy] = useState(false);
+  return (
+    <main className="app">
+      <div className="sida">
+        <button className="pill" onClick={onTillbaka}>Tillbaka</button>
+        <h1>Mina ämnen</h1>
+        <p className="dov">Ämnets sort bestämmer hur din hjälplärare gör förhören. Språk får uppläsning, läsämnen får en sammanfattning först.</p>
+        {amnen.map((a) => (
+          <div className="kort" key={a.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <strong style={{ fontSize: 17 }}>{a.namn}</strong>
+              <span className="dov">{TYPER[a.typ]?.namn}{a.sprak ? ` · uppläsning på ${sprakNamn(a.sprak).toLowerCase()}` : ""}</span>
+            </span>
+            <button className="tabort" style={{ alignSelf: "auto" }} onClick={() => confirm(`Ta bort ämnet ${a.namn}?`) && onTaBort(a.id)}>Ta bort</button>
+          </div>
+        ))}
+        {ny ? (
+          <NyttAmne barn={barn} onSpara={(a) => { onLaggTill(a); setNy(false); }} onAvbryt={() => setNy(false)} />
+        ) : (
+          <button className="knapp ram" onClick={() => setNy(true)}>+ Nytt ämne</button>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function Fota({ barn, kod, amnen, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
   const [bilder, setBilder] = useState([]);
   const [lage, setLage] = useState("forhor");
   const [anteckning, setAnteckning] = useState("");
   const [vantar, setVantar] = useState(false);
   const [fel, setFel] = useState("");
+  const [amneId, setAmneId] = useState(null);
+  const [nyttAmne, setNyttAmne] = useState(false);
+  const amne = amnen.find((a) => a.id === amneId);
 
   async function laggTill(e) {
     const filer = Array.from(e.target.files || []);
@@ -247,7 +381,7 @@ function Fota({ barn, kod, onTillbaka, onKlar, onFelKod }) {
       const r = await fetch("/api/skapa", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kod, barnId: barn.id, bilder, lage, anteckning }),
+        body: JSON.stringify({ kod, barnId: barn.id, bilder, lage, anteckning, amne }),
       });
       const data = await r.json().catch(() => ({}));
       if (r.status === 401) { alert("Familjekoden stämmer inte längre. Skriv in den igen."); return onFelKod(); }
@@ -257,7 +391,16 @@ function Fota({ barn, kod, onTillbaka, onKlar, onFelKod }) {
       if (!data.fragor || data.fragor.length === 0) {
         throw new Error(data.sammanfattning || "Hittade inga frågor att göra. Prova att fota tydligare.");
       }
-      onKlar({ ...data, id: Date.now().toString(36), lage, skapad: new Date().toISOString() });
+      onKlar({
+        ...data,
+        id: Date.now().toString(36),
+        lage,
+        amneId: amne.id,
+        amneNamn: amne.namn,
+        amneTyp: amne.typ,
+        sprak: amne.sprak,
+        skapad: new Date().toISOString(),
+      });
     } catch (e) {
       setFel(e.message);
       setVantar(false);
@@ -306,6 +449,18 @@ function Fota({ barn, kod, onTillbaka, onKlar, onFelKod }) {
             ))}
           </div>
         )}
+        <span style={{ fontWeight: 800, fontSize: 15 }}>Vilket ämne?</span>
+        <div className="chips">
+          {amnen.map((a) => (
+            <Chip key={a.id} aktiv={amneId === a.id} farg={barn.farg} onClick={() => { setAmneId(a.id); setNyttAmne(false); }}>{a.namn}</Chip>
+          ))}
+          <Chip aktiv={nyttAmne} farg={barn.farg} onClick={() => setNyttAmne(true)}>+ Nytt ämne</Chip>
+        </div>
+        {nyttAmne && (
+          <NyttAmne barn={barn} onAvbryt={() => setNyttAmne(false)}
+            onSpara={(a) => { onNyttAmne(a); setAmneId(a.id); setNyttAmne(false); }} />
+        )}
+        {amne && <p className="dov">{TYPER[amne.typ]?.info}</p>}
         <div className="rad">
           <button className="liten-knapp" onClick={() => setLage("forhor")}
             style={{ background: lage === "forhor" ? barn.farg : "#fff", color: lage === "forhor" ? "#fff" : "#1F2937", border: `2px solid ${barn.farg}` }}>
@@ -318,10 +473,11 @@ function Fota({ barn, kod, onTillbaka, onKlar, onFelKod }) {
         </div>
         <label className="etikett">
           Vad vill du träna på? (valfritt)
-          <input className="falt" value={anteckning} onChange={(e) => setAnteckning(e.target.value)} placeholder="t.ex. glosorna svenska till engelska" />
+          <input className="falt" value={anteckning} onChange={(e) => setAnteckning(e.target.value)} placeholder={amne?.typ === "sprak" ? "t.ex. glosorna svenska till engelska" : amne?.typ === "matte" ? "t.ex. bråk med olika nämnare" : "t.ex. kapitel 3 om vikingatiden"} />
         </label>
         {fel && <p className="fel">{fel}</p>}
-        <button className="knapp" style={{ background: barn.farg, marginTop: "auto" }} disabled={bilder.length === 0} onClick={skapa}>
+        {bilder.length > 0 && !amne && <p className="dov" style={{ textAlign: "center" }}>Välj ett ämne först.</p>}
+        <button className="knapp" style={{ background: barn.farg, marginTop: "auto" }} disabled={bilder.length === 0 || !amne} onClick={skapa}>
           Skapa min hjälplärare
         </button>
       </div>
@@ -336,9 +492,36 @@ function Forhor({ barn, forhor, onKlar, onAvbryt }) {
   const [skrivet, setSkrivet] = useState("");
   const [visaLedtrad, setVisaLedtrad] = useState(false);
   const [klar, setKlar] = useState(false);
+  const punkter = forhor.nyckelpunkter || [];
+  const [intro, setIntro] = useState(punkter.length > 0);
 
   const fragor = forhor.fragor;
   const f = fragor[nr];
+
+  if (intro) {
+    return (
+      <main className="app">
+        <div className="sida">
+          <button className="pill" onClick={onAvbryt}>Avsluta</button>
+          <p className="amne" style={{ color: barn.farg, margin: 0 }}>{forhor.amneNamn || forhor.amne}</p>
+          <h1>Det viktigaste</h1>
+          <p>{forhor.sammanfattning}</p>
+          <div className="kort">
+            <ul className="punkter">
+              {punkter.map((p, i) => <li key={i}>{p}</li>)}
+            </ul>
+            <button className="liten-knapp" style={{ background: barn.ljus, alignSelf: "flex-start", padding: "8px 14px" }}
+              onClick={() => lasUpp([forhor.sammanfattning, ...punkter].join(". "))}>
+              <HogtalarIkon /> Läs upp
+            </button>
+          </div>
+          <button className="knapp" style={{ background: barn.farg, marginTop: "auto" }} onClick={() => setIntro(false)}>
+            Starta förhöret ({fragor.length} frågor)
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   if (klar) {
     const andel = antalRatt / fragor.length;
@@ -386,12 +569,20 @@ function Forhor({ barn, forhor, onKlar, onAvbryt }) {
           <span className="dov" style={{ fontWeight: 700 }}>Fråga {nr + 1} av {fragor.length}</span>
         </div>
         <div className="stapel"><div style={{ width: `${((nr + (besvarad ? 1 : 0)) / fragor.length) * 100}%`, background: barn.farg }} /></div>
-        {nr === 0 && !besvarad && <p className="dov">{forhor.sammanfattning}</p>}
+        {nr === 0 && !besvarad && punkter.length === 0 && <p className="dov">{forhor.sammanfattning}</p>}
         <div className="kort">
-          <span className="amne" style={{ color: barn.farg }}>{forhor.amne}</span>
+          <span className="amne" style={{ color: barn.farg }}>{forhor.amneNamn || forhor.amne}</span>
           <p className="fraga">{f.fraga}</p>
-          <div className="rad" style={{ flexWrap: "nowrap" }}>
-            <button className="liten-knapp" style={{ background: barn.ljus, flex: "0 0 auto", padding: "8px 14px" }} onClick={() => lasUpp(f.fraga)}>Läs upp</button>
+          <div className="rad" style={{ flexWrap: "wrap" }}>
+            <button className="liten-knapp" style={{ background: barn.ljus, flex: "0 0 auto", padding: "8px 14px" }} onClick={() => lasUpp(f.fraga)}>
+              <HogtalarIkon /> Läs upp
+            </button>
+            {f.lasupp && (
+              <button className="liten-knapp" style={{ background: barn.ljus, flex: "0 0 auto", padding: "8px 14px" }}
+                onClick={() => lasUpp(f.lasupp, f.lasupp_sprak || forhor.sprak)}>
+                <HogtalarIkon /> Lyssna{sprakNamn(f.lasupp_sprak || forhor.sprak) ? ` (${sprakNamn(f.lasupp_sprak || forhor.sprak).toLowerCase()})` : ""}
+              </button>
+            )}
             {!besvarad && (
               <button className="liten-knapp" style={{ background: "#FEF9C3", flex: "0 0 auto", padding: "8px 14px" }} onClick={() => setVisaLedtrad(true)}>Ledtråd</button>
             )}
@@ -425,6 +616,15 @@ function Forhor({ barn, forhor, onKlar, onAvbryt }) {
         )}
       </div>
     </main>
+  );
+}
+
+function HogtalarIkon({ storlek = 18 }) {
+  return (
+    <svg width={storlek} height={storlek} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: "-3px", marginRight: 6 }}>
+      <path d="M11 5 6 9H2v6h4l5 4z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+    </svg>
   );
 }
 
