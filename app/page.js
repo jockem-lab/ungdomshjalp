@@ -21,7 +21,7 @@ function sparaLagrat(nyckel, varde) {
 }
 
 // Krymper fotot innan det skickas: billigare, snabbare och under Vercels storleksgräns.
-function krympBild(fil, maxSida = 1400) {
+function krympBild(fil, maxSida = 1280) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -31,7 +31,7 @@ function krympBild(fil, maxSida = 1400) {
       canvas.height = Math.round(img.height * skala);
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(img.src);
-      resolve(canvas.toDataURL("image/jpeg", 0.8));
+      resolve(canvas.toDataURL("image/jpeg", 0.75));
     };
     img.onerror = reject;
     img.src = URL.createObjectURL(fil);
@@ -246,11 +246,12 @@ function Fota({ barn, kod, onTillbaka, onKlar, onFelKod }) {
     try {
       const r = await fetch("/api/skapa", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-familjekod": kod },
-        body: JSON.stringify({ barnId: barn.id, bilder, lage, anteckning }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kod, barnId: barn.id, bilder, lage, anteckning }),
       });
       const data = await r.json().catch(() => ({}));
-      if (r.status === 401) return onFelKod();
+      if (r.status === 401) { alert("Familjekoden stämmer inte längre. Skriv in den igen."); return onFelKod(); }
+      if (r.status === 413) throw new Error("Bilderna är för stora. Prova med färre bilder.");
       if (!r.ok) throw new Error(data.fel || "Något gick fel.");
       if (!data.fragor || data.fragor.length === 0) {
         throw new Error(data.sammanfattning || "Hittade inga frågor att göra. Prova att fota tydligare.");

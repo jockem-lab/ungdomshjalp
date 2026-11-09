@@ -75,16 +75,23 @@ Läge: ${
 }
 
 export async function POST(req) {
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ fel: "Bilderna var för stora eller kom inte fram. Prova med färre bilder." }, { status: 400 });
+  }
+  const { barnId, bilder, lage, anteckning } = body;
+
   // Enkel familjekod så att inte vem som helst kan använda er API-nyckel.
-  const kod = req.headers.get("x-familjekod") || "";
-  if (!kodStammer(kod)) {
+  // Koden skickas i själva meddelandet (inte i en header) så att å, ä och ö fungerar.
+  if (!kodStammer(body.kod)) {
+    console.warn("Fel familjekod vid skapa");
     return Response.json({ fel: "Fel familjekod." }, { status: 401 });
   }
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ fel: "API-nyckeln saknas på servern." }, { status: 500 });
   }
-
-  const { barnId, bilder, lage, anteckning } = await req.json();
   const barn = hittaBarn(barnId);
   if (!barn) return Response.json({ fel: "Okänt barn." }, { status: 400 });
   if (!Array.isArray(bilder) || bilder.length === 0 || bilder.length > 6) {
