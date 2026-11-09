@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { hittaBarn } from "../../../lib/barn";
 import { kodStammer } from "../../../lib/kod";
 import { tvattaAmne, sprakNamn } from "../../../lib/amnen";
+import { arDemo, demoForhor } from "../../../lib/demo";
 
 export const maxDuration = 60; // sekunder, så Vercel hinner vänta på svaret
 
@@ -128,6 +129,12 @@ export async function POST(req) {
   }
   const { barnId, bilder, lage, anteckning } = body;
   const amne = tvattaAmne(body.amne);
+
+  // Testläge: påhittat förhör, Claude anropas inte.
+  if (arDemo(body.kod)) {
+    await new Promise((r) => setTimeout(r, 1500));
+    return Response.json(demoForhor(amne));
+  }
 
   // Enkel familjekod så att inte vem som helst kan använda er API-nyckel.
   // Koden skickas i själva meddelandet (inte i en header) så att å, ä och ö fungerar.

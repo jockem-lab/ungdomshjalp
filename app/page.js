@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { BARN, hittaBarn } from "../lib/barn";
 import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
+import { arDemo } from "../lib/demo";
 
 function lasLagrat(nyckel, standard) {
   try {
@@ -63,6 +64,8 @@ export default function App() {
   const [material, setMaterial] = useState([]);
   const [aktivt, setAktivt] = useState(null); // förhöret som körs
   const [amnen, setAmnen] = useState(STANDARD_AMNEN);
+  const demo = arDemo(kod);
+  const prefix = demo ? "demo-" : ""; // testläget sparar separat från barnens riktiga förhör
 
   useEffect(() => {
     setKod(lasLagrat("familjekod", null));
@@ -71,22 +74,33 @@ export default function App() {
 
   useEffect(() => {
     if (barnId) {
-      setMaterial(lasLagrat(`material-${barnId}`, []));
-      setAmnen(lasLagrat(`amnen-${barnId}`, STANDARD_AMNEN));
+      setMaterial(lasLagrat(`${prefix}material-${barnId}`, []));
+      setAmnen(lasLagrat(`${prefix}amnen-${barnId}`, STANDARD_AMNEN));
     }
-  }, [barnId]);
+  }, [barnId, prefix]);
 
   function uppdateraAmnen(lista) {
     setAmnen(lista);
-    sparaLagrat(`amnen-${barnId}`, lista);
+    sparaLagrat(`${prefix}amnen-${barnId}`, lista);
   }
 
   function uppdateraMaterial(lista) {
     setMaterial(lista);
-    sparaLagrat(`material-${barnId}`, lista);
+    sparaLagrat(`${prefix}material-${barnId}`, lista);
   }
 
   if (!laddat) return null;
+  if (kod && demo) {
+    return (
+      <>
+        <div className="testband">Testläge: påhittade förhör, inga krediter används</div>
+        {innehall()}
+      </>
+    );
+  }
+  return innehall();
+
+  function innehall() {
   if (!kod) return <Login onKlar={(k) => { sparaLagrat("familjekod", k); setKod(k); }} />;
 
   const barn = barnId ? hittaBarn(barnId) : null;
@@ -158,6 +172,7 @@ export default function App() {
       onTaBort={(id) => uppdateraMaterial(material.filter((m) => m.id !== id))}
     />
   );
+}
 }
 
 function Login({ onKlar }) {
