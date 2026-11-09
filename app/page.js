@@ -252,7 +252,8 @@ function Fota({ barn, kod, onTillbaka, onKlar, onFelKod }) {
       const data = await r.json().catch(() => ({}));
       if (r.status === 401) { alert("Familjekoden stämmer inte längre. Skriv in den igen."); return onFelKod(); }
       if (r.status === 413) throw new Error("Bilderna är för stora. Prova med färre bilder.");
-      if (!r.ok) throw new Error(data.fel || "Något gick fel.");
+      if (r.status === 504) throw new Error("Det tog för lång tid. Prova med färre bilder eller försök igen.");
+      if (!r.ok) throw new Error(data.fel || `Något gick fel (felkod ${r.status}).`);
       if (!data.fragor || data.fragor.length === 0) {
         throw new Error(data.sammanfattning || "Hittade inga frågor att göra. Prova att fota tydligare.");
       }

@@ -74,6 +74,22 @@ Läge: ${
   }`;
 }
 
+// Gör om fel från Claude till något en förälder kan förstå och åtgärda.
+function forklaraFel(e) {
+  const status = e?.status;
+  const text = String(e?.message || "");
+  if (/credit balance|billing|purchase credits/i.test(text)) {
+    return "Kontot hos Anthropic saknar krediter. En förälder behöver fylla på under Billing på console.anthropic.com.";
+  }
+  if (status === 401) return "API-nyckeln fungerar inte. En förälder behöver kolla ANTHROPIC_API_KEY i Vercel.";
+  if (status === 403) return "API-nyckeln saknar behörighet. En förälder behöver kolla kontot på console.anthropic.com.";
+  if (status === 404) return `Modellen hittades inte (${MODELL}). En förälder behöver kolla inställningen CLAUDE_MODEL.`;
+  if (status === 413) return "Bilderna är för stora. Prova med färre bilder.";
+  if (status === 429) return "För många förfrågningar just nu, eller så är månadsgränsen nådd. Vänta en stund och försök igen.";
+  if (status === 529 || status >= 500) return "Claude är överbelastad just nu. Försök igen om en liten stund.";
+  return `Hjälpläraren kunde inte svara (${status || "okänt fel"}: ${text.slice(0, 160)})`;
+}
+
 export async function POST(req) {
   let body;
   try {
@@ -127,7 +143,7 @@ export async function POST(req) {
     if (!verktyg) throw new Error("Inget förhör i svaret");
     return Response.json(verktyg.input);
   } catch (e) {
-    console.error(e);
-    return Response.json({ fel: "Hjälpläraren kunde inte svara just nu. Försök igen." }, { status: 502 });
+    console.error("Claude-fel:", e?.status, e?.message);
+    return Response.json({ fel: forklaraFel(e) }, { status: 502 });
   }
 }
