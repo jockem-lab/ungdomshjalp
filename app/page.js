@@ -148,8 +148,9 @@ function Login({ onKlar }) {
       body: JSON.stringify({ kod: text.trim() }),
     }).catch(() => null);
     setVantar(false);
-    if (r && r.ok) onKlar(text.trim());
-    else setFel("Fel kod. Fråga mamma eller pappa.");
+    if (r && r.ok) return onKlar(text.trim());
+    const data = r ? await r.json().catch(() => ({})) : {};
+    setFel(data.fel || (r ? "Fel kod. Fråga mamma eller pappa." : "Ingen kontakt med servern."));
   }
 
   return (

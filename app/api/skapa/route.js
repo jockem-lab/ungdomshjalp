@@ -3,6 +3,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { hittaBarn } from "../../../lib/barn";
+import { kodStammer } from "../../../lib/kod";
 
 export const maxDuration = 60; // sekunder, så Vercel hinner vänta på svaret
 
@@ -76,7 +77,7 @@ Läge: ${
 export async function POST(req) {
   // Enkel familjekod så att inte vem som helst kan använda er API-nyckel.
   const kod = req.headers.get("x-familjekod") || "";
-  if (!process.env.FAMILJEKOD || kod !== process.env.FAMILJEKOD) {
+  if (!kodStammer(kod)) {
     return Response.json({ fel: "Fel familjekod." }, { status: 401 });
   }
   if (!process.env.ANTHROPIC_API_KEY) {
