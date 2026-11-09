@@ -9,49 +9,47 @@ export const maxDuration = 60; // sekunder, så Vercel hinner vänta på svaret
 
 const MODELL = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
 
-// Claude måste svara genom att "anropa" det här verktyget, då får vi alltid giltig JSON.
-const FORHOR_VERKTYG = {
-  name: "skapa_forhor",
-  description: "Skapa ett läxförhör från elevens material.",
-  input_schema: {
-    type: "object",
-    properties: {
-      titel: { type: "string", description: "Kort titel på materialet, t.ex. 'Glosor vecka 46'" },
-      amne: { type: "string", description: "Skolämne, t.ex. Matte, Engelska, SO" },
-      sammanfattning: {
-        type: "string",
-        description: "2–4 meningar om vad materialet handlar om, skrivet direkt till eleven",
-      },
-      fragor: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            typ: { type: "string", enum: ["flerval", "skriv"] },
-            fraga: { type: "string" },
-            alternativ: {
-              type: "array",
-              items: { type: "string" },
-              description: "Bara för flerval: 3–4 alternativ",
-            },
-            ratt: {
-              type: "string",
-              description: "Rätt svar. För flerval exakt samma text som rätt alternativ.",
-            },
-            godkanda: {
-              type: "array",
-              items: { type: "string" },
-              description: "Bara för skriv: andra stavningar/formuleringar som också är rätt",
-            },
-            ledtrad: { type: "string", description: "En ledtråd som hjälper utan att avslöja svaret" },
-            forklaring: { type: "string", description: "Kort förklaring som visas efter svaret" },
+// Claude måste svara med JSON som följer det här schemat ("structured outputs").
+const FORHOR_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    titel: { type: "string", description: "Kort titel på materialet, t.ex. 'Glosor vecka 46'" },
+    amne: { type: "string", description: "Skolämne, t.ex. Matte, Engelska, SO" },
+    sammanfattning: {
+      type: "string",
+      description: "2–4 meningar om vad materialet handlar om, skrivet direkt till eleven",
+    },
+    fragor: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          typ: { type: "string", enum: ["flerval", "skriv"] },
+          fraga: { type: "string" },
+          alternativ: {
+            type: "array",
+            items: { type: "string" },
+            description: "För flerval: 3–4 alternativ. För skriv: tom lista.",
           },
-          required: ["typ", "fraga", "ratt", "ledtrad", "forklaring"],
+          ratt: {
+            type: "string",
+            description: "Rätt svar. För flerval exakt samma text som rätt alternativ.",
+          },
+          godkanda: {
+            type: "array",
+            items: { type: "string" },
+            description: "För skriv: andra stavningar/formuleringar som också är rätt. Annars tom lista.",
+          },
+          ledtrad: { type: "string", description: "En ledtråd som hjälper utan att avslöja svaret" },
+          forklaring: { type: "string", description: "Kort förklaring som visas efter svaret" },
         },
+        required: ["typ", "fraga", "alternativ", "ratt", "godkanda", "ledtrad", "forklaring"],
       },
     },
-    required: ["titel", "amne", "sammanfattning", "fragor"],
   },
+  required: ["titel", "amne", "sammanfattning", "fragor"],
 };
 
 function systemPrompt(barn, lage) {
@@ -133,15 +131,14 @@ export async function POST(req) {
     const client = new Anthropic();
     const svar = await client.messages.create({
       model: MODELL,
-      max_tokens: 4000,
+      max_tokens: 8000,
       system: systemPrompt(barn, lage),
-      tools: [FORHOR_VERKTYG],
-      tool_choice: { type: "tool", name: "skapa_forhor" },
+      output_config: { format: { type: "json_schema", schema: FORHOR_SCHEMA } },
       messages: [{ role: "user", content: innehall }],
     });
-    const verktyg = svar.content.find((c) => c.type === "tool_use");
-    if (!verktyg) throw new Error("Inget förhör i svaret");
-    return Response.json(verktyg.input);
+    const text = svar.content.filter((c) => c.type === "text").map((c) => c.text).join("");
+    if (!text) throw new Error("Inget förhör i svaret");
+    return Response.json(JSON.parse(text));
   } catch (e) {
     console.error("Claude-fel:", e?.status, e?.message);
     return Response.json({ fel: forklaraFel(e) }, { status: 502 });
