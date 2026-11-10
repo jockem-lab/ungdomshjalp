@@ -9,6 +9,7 @@ import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
 import { arDemo } from "../lib/demo";
 import { npForBarn } from "../lib/np";
 import { NIVAER, nivaNamn } from "../lib/niva";
+import { DJUR, KLISTER, MARKEN, tomBelo, dagarIRad, belona } from "../lib/belo";
 
 function lasLagrat(nyckel, standard) {
   try {
@@ -54,6 +55,40 @@ function lasUpp(text, sprak = "sv-SE") {
   } catch {}
 }
 
+// Taligenkänning i webbläsaren (Chrome, Edge och Safari). Ger tillbaka det barnet sa.
+function taligenkanningFinns() {
+  return typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+function lyssnaPa(sprak = "sv-SE") {
+  return new Promise((resolve, reject) => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return reject(new Error("Din webbläsare kan inte lyssna. Prova Chrome eller Safari."));
+    const r = new SR();
+    r.lang = sprak || "sv-SE";
+    r.interimResults = false;
+    r.maxAlternatives = 3;
+    let klar = false;
+    r.onresult = (e) => {
+      klar = true;
+      resolve(Array.from(e.results[0]).map((a) => a.transcript));
+    };
+    r.onerror = (e) => { klar = true; reject(new Error(e.error === "not-allowed" ? "Tillåt mikrofonen för att kunna prata in svaret." : "Jag hörde inget. Försök igen.")); };
+    r.onend = () => { if (!klar) reject(new Error("Jag hörde inget. Försök igen.")); };
+    try { window.speechSynthesis.cancel(); } catch {}
+    r.start();
+  });
+}
+
+function MikIkon({ storlek = 18 }) {
+  return (
+    <svg width={storlek} height={storlek} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: "-3px", marginRight: 6 }}>
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 17v4" />
+    </svg>
+  );
+}
+
 function normalisera(s) {
   return String(s || "").toLowerCase().trim().replace(/[.!?,;:"']/g, "").replace(/\s+/g, " ");
 }
@@ -66,6 +101,7 @@ export default function App() {
   const [material, setMaterial] = useState([]);
   const [aktivt, setAktivt] = useState(null); // förhöret som körs
   const [amnen, setAmnen] = useState(STANDARD_AMNEN);
+  const [belo, setBelo] = useState(tomBelo());
   const demo = arDemo(kod);
   const prefix = demo ? "demo-" : ""; // testläget sparar separat från barnens riktiga förhör
 
@@ -78,8 +114,18 @@ export default function App() {
     if (barnId) {
       setMaterial(lasLagrat(`${prefix}material-${barnId}`, []));
       setAmnen(lasLagrat(`${prefix}amnen-${barnId}`, STANDARD_AMNEN));
+      setBelo(lasLagrat(`${prefix}belo-${barnId}`, tomBelo()));
     }
   }, [barnId, prefix]);
+
+  // Ger barnet en belöning efter ett avklarat förhör eller kortpass.
+  function geBelöning(andel) {
+    const b = hittaBarn(barnId);
+    const { belo: ny, vinst } = belona(belo, b?.belo || "dagar", andel);
+    setBelo(ny);
+    sparaLagrat(`${prefix}belo-${barnId}`, ny);
+    return vinst;
+  }
 
   function uppdateraAmnen(lista) {
     setAmnen(lista);
@@ -139,6 +185,7 @@ export default function App() {
       <Forhor
         barn={barn}
         forhor={aktivt}
+        onBelona={geBelöning}
         onKlar={(resultat) => {
           const lista = material.map((m) =>
             m.id === aktivt.id ? { ...m, senast: { ...resultat, datum: new Date().toISOString() } } : m
@@ -149,6 +196,14 @@ export default function App() {
         onAvbryt={() => setSkarm("hem")}
       />
     );
+  }
+
+  if (skarm === "kort" && aktivt) {
+    return <Bladdrakort barn={barn} forhor={aktivt} onBelona={geBelöning} onKlar={() => setSkarm("hem")} />;
+  }
+
+  if (skarm === "belo") {
+    return <Beloningar barn={barn} belo={belo} onTillbaka={() => setSkarm("hem")} />;
   }
 
   if (skarm === "np") {
@@ -185,6 +240,9 @@ export default function App() {
       material={material}
       onAmnen={() => setSkarm("amnen")}
       onNp={() => setSkarm("np")}
+      belo={belo}
+      onBelo={() => setSkarm("belo")}
+      onKort={(m) => { setAktivt(m); setSkarm("kort"); }}
       onByt={() => setSkarm("valj")}
       onFota={() => setSkarm("fota")}
       onStarta={(m) => { setAktivt(m); setSkarm("forhor"); }}
@@ -256,7 +314,7 @@ function amnesEtikett(m) {
   return m.amneNamn || m.amne || "Övrigt";
 }
 
-function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp }) {
+function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp, belo, onBelo, onKort }) {
   const np = npForBarn(barn.arskurs);
   const [filter, setFilter] = useState(null);
   const amnesNamn = [...new Set(material.map(amnesEtikett))];
@@ -268,6 +326,7 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp 
         <button className="pill" onClick={onByt}>Byt person</button>
         <h1>Hej {barn.namn}!</h1>
         <p style={{ opacity: 0.95 }}>Fota en sida ur boken eller dina glosor, så gör din hjälplärare ett förhör.</p>
+        <button className="pill" onClick={onBelo}>{beloKort(barn, belo)}</button>
       </div>
       <div className="sida">
         <button className="knapp" onClick={onFota}>
@@ -303,6 +362,9 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp 
             <div className="rad">
               <button className="liten-knapp" style={{ background: barn.ljus }} onClick={() => onStarta(m)}>
                 {m.senast ? "Träna igen" : "Starta"}
+              </button>
+              <button className="liten-knapp" style={{ background: "#fff", border: `2px solid ${barn.ljus}` }} onClick={() => onKort(m)}>
+                Bläddrakort
               </button>
             </div>
             <button className="tabort" onClick={() => confirm("Ta bort det här förhöret?") && onTaBort(m.id)}>Ta bort</button>
@@ -477,6 +539,208 @@ function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
   );
 }
 
+function beloKort(barn, belo) {
+  if (barn.belo === "djur") return `Mina djur: ${belo.samling || 0}`;
+  if (barn.belo === "klister") return `Mina klistermärken: ${belo.samling || 0}`;
+  const d = dagarIRad(belo.dagar || []);
+  return `${d} ${d === 1 ? "dag" : "dagar"} i rad`;
+}
+
+function Vinst({ barn, vinst }) {
+  if (!vinst) return null;
+  if (vinst.typ === "dagar") {
+    return (
+      <div className="vinst" style={{ background: barn.ljus }}>
+        <strong style={{ fontSize: 28 }}>{vinst.dagar} {vinst.dagar === 1 ? "dag" : "dagar"} i rad</strong>
+        {vinst.nyttMarke ? <span>Nytt märke: {vinst.nyttMarke} dagar i rad!</span> : <span>Träna imorgon också så växer kedjan.</span>}
+      </div>
+    );
+  }
+  return (
+    <div className="vinst" style={{ background: barn.ljus }}>
+      <span style={{ fontWeight: 800 }}>{vinst.typ === "djur" ? "Nya djur i din samling!" : "Nya klistermärken!"}</span>
+      <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+        {vinst.nya.map(([tecken, namnEllerFarg], i) => (
+          <span key={i} className="samlad" style={{ background: vinst.typ === "klister" ? namnEllerFarg : "#fff" }}>
+            <span style={{ fontSize: 44 }} aria-hidden="true">{tecken}</span>
+            {vinst.typ === "djur" && <span style={{ fontSize: 13, fontWeight: 700 }}>{namnEllerFarg}</span>}
+          </span>
+        ))}
+      </div>
+      <span className="dov">Du har samlat {vinst.totalt} totalt.</span>
+    </div>
+  );
+}
+
+function Beloningar({ barn, belo, onTillbaka }) {
+  const lista = barn.belo === "djur" ? DJUR : barn.belo === "klister" ? KLISTER : null;
+  const antal = belo.samling || 0;
+  const dagar = dagarIRad(belo.dagar || []);
+  return (
+    <main className="app">
+      <div className="sida">
+        <button className="pill" onClick={onTillbaka}>Tillbaka</button>
+        <h1>{barn.belo === "djur" ? "Min djursamling" : barn.belo === "klister" ? "Mina klistermärken" : "Min träning"}</h1>
+        <p className="dov">Du har gjort {belo.forhor || 0} förhör och tränat {(belo.dagar || []).length} olika dagar.</p>
+        {lista ? (
+          <>
+            <p>Du får {barn.belo === "djur" ? "ett nytt djur" : "ett nytt klistermärke"} för varje förhör du gör klart, och två om du har minst 80 % rätt.</p>
+            <div className="samling">
+              {lista.map(([tecken, x], i) => (
+                <span key={i} className="samlad" style={{ background: i < antal ? (barn.belo === "klister" ? x : "#fff") : "#F3F4F6", opacity: i < antal ? 1 : 0.5 }}>
+                  <span style={{ fontSize: 34, filter: i < antal ? "none" : "grayscale(1) brightness(0.3)" }} aria-hidden="true">{i < antal ? tecken : "?"}</span>
+                  {barn.belo === "djur" && <span style={{ fontSize: 11, fontWeight: 700 }}>{i < antal ? x : "???"}</span>}
+                </span>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="vinst" style={{ background: barn.ljus }}>
+              <strong style={{ fontSize: 40 }}>{dagar}</strong>
+              <span>{dagar === 1 ? "dag" : "dagar"} i rad</span>
+            </div>
+            <h2>Märken</h2>
+            <div className="samling">
+              {MARKEN.map((m) => {
+                const langsta = langstaKedja(belo.dagar || []);
+                const har = langsta >= m;
+                return (
+                  <span key={m} className="samlad" style={{ background: har ? barn.farg : "#F3F4F6", color: har ? "#fff" : "#6B7280" }}>
+                    <strong style={{ fontSize: 22 }}>{m}</strong>
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>dagar</span>
+                  </span>
+                );
+              })}
+            </div>
+            <p className="dov">Ett märke låses upp när du har tränat så många dagar i rad.</p>
+          </>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function langstaKedja(dagar) {
+  const s = [...new Set(dagar)].sort();
+  let basta = 0, nu = 0, forra = null;
+  for (const d of s) {
+    const t = new Date(d + "T12:00:00");
+    nu = forra && (t - forra) / 86400000 === 1 ? nu + 1 : 1;
+    basta = Math.max(basta, nu);
+    forra = t;
+  }
+  return basta;
+}
+
+// Bläddrakort: framsida och baksida, "Kunde" eller "Öva mer". Korten man inte kunde kommer tillbaka.
+function gorKort(forhor) {
+  return forhor.fragor.map((f) => {
+    const ord = f.lasupp && normalisera(f.lasupp) !== normalisera(f.ratt) ? f.lasupp : "";
+    return {
+      fram: ord || f.fraga,
+      bak: f.ratt,
+      extra: f.forklaring,
+      ord: ord || (f.lasupp && normalisera(f.lasupp) === normalisera(f.ratt) ? f.lasupp : ""),
+      sprak: f.lasupp_sprak || forhor.sprak || "",
+      ordPaFram: Boolean(ord),
+    };
+  });
+}
+
+function Bladdrakort({ barn, forhor, onBelona, onKlar }) {
+  const [hog, setHog] = useState(() => gorKort(forhor));
+  const [vand, setVand] = useState(false);
+  const [kunde, setKunde] = useState(0);
+  const [totalt] = useState(() => gorKort(forhor).length);
+  const [forsta, setForsta] = useState(new Set());
+  const [klar, setKlar] = useState(false);
+  const [vinst, setVinst] = useState(null);
+  const [uttal, setUttal] = useState("");
+  const [lyssnar, setLyssnar] = useState(false);
+  const kort = hog[0];
+
+  function svar(ok) {
+    const [nu, ...resten] = hog;
+    const nyckel = nu.fram;
+    if (ok && !forsta.has(nyckel)) setKunde((k) => k + 1);
+    if (!ok) setForsta((f) => new Set(f).add(nyckel));
+    const ny = ok ? resten : [...resten, nu];
+    setVand(false);
+    setUttal("");
+    if (ny.length === 0) {
+      setVinst(onBelona(kunde / totalt + (ok && !forsta.has(nyckel) ? 1 / totalt : 0)));
+      setKlar(true);
+    }
+    setHog(ny);
+  }
+
+  async function sagOrdet() {
+    setLyssnar(true);
+    setUttal("");
+    try {
+      const hort = await lyssnaPa(kort.sprak);
+      const ratt = hort.some((h) => normalisera(h) === normalisera(kort.ord));
+      setUttal(ratt ? "Bra uttal! Jag förstod precis vad du sa." : `Jag hörde "${hort[0]}". Lyssna en gång till och försök igen.`);
+    } catch (e) {
+      setUttal(e.message);
+    }
+    setLyssnar(false);
+  }
+
+  if (klar) {
+    return (
+      <main className="app">
+        <div className="sida" style={{ justifyContent: "center", textAlign: "center" }}>
+          <h1>Alla kort klara!</h1>
+          <p style={{ fontSize: 20, fontWeight: 800, color: barn.farg }}>Du kunde {kunde} av {totalt} direkt</p>
+          <Vinst barn={barn} vinst={vinst} />
+          <button className="knapp" style={{ background: barn.farg }} onClick={onKlar}>Klar</button>
+        </div>
+      </main>
+    );
+  }
+
+  const kanPrata = kort.ord && kort.sprak && kort.sprak !== "sv-SE" && taligenkanningFinns();
+
+  return (
+    <main className="app">
+      <div className="sida">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button className="pill" onClick={onKlar}>Avsluta</button>
+          <span className="dov" style={{ fontWeight: 700 }}>{hog.length} kort kvar</span>
+        </div>
+        <button className={`bladdrakort ${vand ? "vand" : ""}`} style={{ borderColor: barn.farg }} onClick={() => setVand(!vand)}>
+          <span className="amne" style={{ color: barn.farg }}>{vand ? "Baksida" : "Framsida"} · tryck för att vända</span>
+          <span className="korttext">{vand ? kort.bak : kort.fram}</span>
+          {vand && kort.extra && <span className="dov">{kort.extra}</span>}
+        </button>
+        <div className="rad" style={{ flexWrap: "wrap" }}>
+          {kort.ord && (
+            <button className="liten-knapp" style={{ background: barn.ljus, flex: "0 0 auto", padding: "8px 14px" }} onClick={() => lasUpp(kort.ord, kort.sprak)}>
+              <HogtalarIkon /> Lyssna
+            </button>
+          )}
+          {kanPrata && (
+            <button className="liten-knapp" style={{ background: barn.ljus, flex: "0 0 auto", padding: "8px 14px" }} disabled={lyssnar} onClick={sagOrdet}>
+              <MikIkon /> {lyssnar ? "Jag lyssnar…" : "Säg ordet"}
+            </button>
+          )}
+        </div>
+        {uttal && <p className="ledtrad">{uttal}</p>}
+        {vand ? (
+          <div className="rad" style={{ marginTop: "auto" }}>
+            <button className="knapp ram" onClick={() => svar(false)}>Öva mer</button>
+            <button className="knapp" style={{ background: barn.farg }} onClick={() => svar(true)}>Jag kunde</button>
+          </div>
+        ) : (
+          <button className="knapp" style={{ marginTop: "auto" }} onClick={() => setVand(true)}>Vänd kortet</button>
+        )}
+      </div>
+    </main>
+  );
+}
+
 function Amnen({ barn, amnen, onTillbaka, onLaggTill, onTaBort }) {
   const [ny, setNy] = useState(false);
   return (
@@ -635,7 +899,10 @@ function Fota({ barn, kod, amnen, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
   );
 }
 
-function Forhor({ barn, forhor, onKlar, onAvbryt }) {
+function Forhor({ barn, forhor, onKlar, onAvbryt, onBelona }) {
+  const [vinst, setVinst] = useState(null);
+  const [lyssnar, setLyssnar] = useState(false);
+  const [talFel, setTalFel] = useState("");
   const [nr, setNr] = useState(0);
   const [antalRatt, setAntalRatt] = useState(0);
   const [valt, setValt] = useState(null); // svaret eleven gav på nuvarande fråga
@@ -694,6 +961,7 @@ function Forhor({ barn, forhor, onKlar, onAvbryt }) {
           <h1>{andel >= 0.8 ? "Superbra jobbat!" : andel >= 0.5 ? "Bra kämpat!" : "Bra att du tränar!"}</h1>
           <p style={{ fontSize: 22, fontWeight: 800, color: barn.farg }}>{antalRatt} av {fragor.length} rätt</p>
           <p className="dov">{andel >= 0.8 ? "Du kan det här. Kör igen innan provet så sitter det." : "Kör en gång till, det blir lättare för varje gång."}</p>
+          <Vinst barn={barn} vinst={vinst} />
           <button className="knapp" style={{ background: barn.farg }} onClick={() => onKlar({ ratt: antalRatt, antal: fragor.length })}>Klar</button>
         </div>
       </main>
@@ -717,7 +985,11 @@ function Forhor({ barn, forhor, onKlar, onAvbryt }) {
   }
 
   function nasta() {
-    if (nr + 1 >= fragor.length) return setKlar(true);
+    if (nr + 1 >= fragor.length) {
+      if (onBelona) setVinst(onBelona(antalRatt / fragor.length));
+      return setKlar(true);
+    }
+    setTalFel("");
     setNr(nr + 1);
     setValt(null);
     setSkrivet("");
@@ -766,6 +1038,18 @@ function Forhor({ barn, forhor, onKlar, onAvbryt }) {
           <form onSubmit={(e) => { e.preventDefault(); if (skrivet.trim()) svara(skrivet); }} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <input className="falt" value={skrivet} onChange={(e) => setSkrivet(e.target.value)} disabled={besvarad}
               placeholder="Skriv ditt svar" autoCapitalize="off" autoCorrect="off" spellCheck="false" />
+            {!besvarad && taligenkanningFinns() && (
+              <button type="button" className="liten-knapp" style={{ background: barn.ljus, alignSelf: "flex-start", padding: "8px 14px" }} disabled={lyssnar}
+                onClick={async () => {
+                  setLyssnar(true); setTalFel("");
+                  try { const [txt] = await lyssnaPa(f.lasupp_sprak || (forhor.amneTyp === "sprak" ? forhor.sprak : "") || "sv-SE"); setSkrivet(txt); }
+                  catch (e) { setTalFel(e.message); }
+                  setLyssnar(false);
+                }}>
+                <MikIkon /> {lyssnar ? "Jag lyssnar…" : "Säg svaret"}
+              </button>
+            )}
+            {talFel && <p className="dov">{talFel}</p>}
             {!besvarad && <button className="knapp" style={{ background: barn.farg }} disabled={!skrivet.trim()}>Svara</button>}
           </form>
         ) : (

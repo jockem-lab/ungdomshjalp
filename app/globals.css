@@ -82,3 +82,9 @@ select.falt { appearance: auto; }
 .testband { background: #1F2937; color: #FDE68A; text-align: center; font-size: 13px; font-weight: 700; padding: 8px 12px; }
 .lastext { white-space: pre-line; font-size: 17px; line-height: 1.55; }
 .nivatagg { margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #F3F4F6; color: #374151; font-size: 11px; letter-spacing: 0.03em; }
+.vinst { border-radius: 18px; padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.samling { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.samlad { border-radius: 16px; min-height: 76px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 1px solid #E5E7EB; }
+.bladdrakort { min-height: 300px; border: 3px solid; border-radius: 24px; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; color: #1F2937; }
+.bladdrakort.vand { background: #F9FAFB; }
+.korttext { font-size: 30px; font-weight: 800; line-height: 1.25; }
