@@ -107,3 +107,26 @@ select.falt { appearance: auto; }
 .spnamn { font-size: 13px; font-weight: 800; line-height: 1.2; }
 .spinfo { font-size: 11px; opacity: 0.9; }
 .vinst .spelarkort { width: 120px; }
+
+/* Ediths capybara-tema: mjuka beiga och bruna toner, runt och fluffigt */
+body[data-tema="capy"] { background: #FBF6EF; color: #4A3426; }
+.topp.capy {
+  position: relative; overflow: visible; color: #4A3426; padding-right: 150px; padding-bottom: 34px;
+  background: radial-gradient(circle at 20% 0%, #FFF8EE 0, #F3E4D0 55%, #EAD3B8 100%);
+  border-radius: 0 0 44px 44px; box-shadow: 0 10px 0 #F3E7D9;
+}
+.topp.capy::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -18px; height: 36px; pointer-events: none;
+  background: radial-gradient(circle at 18px 0, #EAD3B8 18px, transparent 19px) repeat-x;
+  background-size: 44px 36px; opacity: 0.55;
+}
+.topp.capy .pill { background: #fff; color: #4A3426; border: 0; box-shadow: 0 3px 0 #E2CDB2; }
+.topp.capy .capy-bild { position: absolute; right: 8px; bottom: 6px; }
+body[data-tema="capy"] .kort { border-radius: 26px; border: 2px solid #F0E2D0; box-shadow: 0 6px 0 #F0E2D0; }
+body[data-tema="capy"] .knapp { border-radius: 26px; box-shadow: 0 5px 0 rgba(74, 52, 38, 0.18); }
+body[data-tema="capy"] .knapp:not(.ram) { background: #8B5E3C; }
+body[data-tema="capy"] .knapp.ram { border-color: #E2CDB2; background: #fff; color: #4A3426; }
+body[data-tema="capy"] .chip, body[data-tema="capy"] .liten-knapp, body[data-tema="capy"] .alt { border-radius: 22px; }
+body[data-tema="capy"] .alt { border-color: #F0E2D0; }
+body[data-tema="capy"] .samlad { border-radius: 22px; border-color: #F0E2D0; }
+body[data-tema="capy"] .fotoyta { border-radius: 28px; }

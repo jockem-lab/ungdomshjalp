@@ -128,6 +128,29 @@ function lyssnaPa(sprak = "sv-SE") {
   });
 }
 
+// Egen tecknad capybara till Ediths sida.
+function Capybara({ storlek = 120, className = "" }) {
+  return (
+    <svg className={className} viewBox="0 0 130 100" width={storlek} height={storlek * 100 / 130} aria-hidden="true">
+      <ellipse cx="68" cy="88" rx="50" ry="6" fill="#4A3426" opacity="0.12" />
+      <ellipse cx="72" cy="62" rx="48" ry="28" fill="#B07D52" />
+      <rect x="36" y="78" width="12" height="12" rx="5" fill="#8B5E3C" />
+      <rect x="94" y="78" width="12" height="12" rx="5" fill="#8B5E3C" />
+      <rect x="10" y="26" width="58" height="42" rx="20" fill="#B07D52" />
+      <rect x="6" y="44" width="30" height="22" rx="11" fill="#9A6B44" />
+      <ellipse cx="54" cy="26" rx="7" ry="6" fill="#8B5E3C" />
+      <circle cx="42" cy="38" r="3.4" fill="#3B2A1E" />
+      <circle cx="43.2" cy="36.8" r="1" fill="#fff" />
+      <circle cx="13" cy="50" r="1.8" fill="#3B2A1E" />
+      <circle cx="21" cy="50" r="1.8" fill="#3B2A1E" />
+      <path d="M13 58 Q17 61 21 58" stroke="#3B2A1E" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+      <circle cx="36" cy="54" r="5" fill="#F2B8A0" opacity="0.75" />
+      <circle cx="34" cy="20" r="9" fill="#F4A340" />
+      <path d="M34 11 q3 -5 7 -3" stroke="#5E8C3A" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function FotbollIkon() {
   return (
     <svg className="fotboll" viewBox="0 0 48 48" width="56" height="56" aria-hidden="true">
@@ -188,6 +211,12 @@ export default function App() {
     sparaLagrat(`${prefix}belo-${barnId}`, ny);
     return vinst;
   }
+
+  // Barnets tema (t.ex. Ediths capybara-känsla) sätts på hela sidan.
+  useEffect(() => {
+    const b = barnId ? hittaBarn(barnId) : null;
+    document.body.dataset.tema = b?.tema || "";
+  }, [barnId]);
 
   useEffect(() => {
     const b = barnId ? hittaBarn(barnId) : null;
@@ -406,7 +435,8 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
 
   return (
     <main className="app">
-      <div className={`topp ${barn.tema === "lfc" ? "lfc" : ""}`} style={barn.tema === "lfc" ? undefined : { background: barn.farg }}>
+      <div className={`topp ${barn.tema || ""}`} style={barn.tema ? undefined : { background: barn.farg }}>
+        {barn.tema === "capy" && <Capybara className="capy-bild" storlek={130} />}
         <button className="pill" onClick={onByt}>Byt person</button>
         {barn.tema === "lfc" && (bilder?.logo ? <img className="klubblogo" src={bilder.logo} alt="Klubbmärke" /> : <FotbollIkon />)}
         <h1>{barn.tema === "lfc" ? `Kom igen, ${barn.namn}!` : `Hej ${barn.namn}!`}</h1>
