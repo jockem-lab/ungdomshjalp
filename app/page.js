@@ -9,7 +9,7 @@ import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
 import { arDemo } from "../lib/demo";
 import { npForBarn } from "../lib/np";
 import { NIVAER, nivaNamn } from "../lib/niva";
-import { DJUR, KLISTER, MARKEN, tomBelo, dagarIRad, belona } from "../lib/belo";
+import { DJUR, KLISTER, SPELARE, MARKEN, tomBelo, dagarIRad, belona } from "../lib/belo";
 
 function lasLagrat(nyckel, standard) {
   try {
@@ -77,6 +77,16 @@ function lyssnaPa(sprak = "sv-SE") {
     try { window.speechSynthesis.cancel(); } catch {}
     r.start();
   });
+}
+
+function FotbollIkon() {
+  return (
+    <svg className="fotboll" viewBox="0 0 48 48" width="56" height="56" aria-hidden="true">
+      <circle cx="24" cy="24" r="22" fill="#fff" stroke="#1F2937" strokeWidth="2" />
+      <path d="M24 13 L32 19 L29 29 L19 29 L16 19 Z" fill="#1F2937" />
+      <path d="M24 13 V4 M32 19 L42 15 M29 29 L35 38 M19 29 L13 38 M16 19 L6 15" stroke="#1F2937" strokeWidth="2" />
+    </svg>
+  );
 }
 
 function MikIkon({ storlek = 18 }) {
@@ -322,9 +332,10 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
 
   return (
     <main className="app">
-      <div className="topp" style={{ background: barn.farg }}>
+      <div className={`topp ${barn.tema === "lfc" ? "lfc" : ""}`} style={barn.tema === "lfc" ? undefined : { background: barn.farg }}>
         <button className="pill" onClick={onByt}>Byt person</button>
-        <h1>Hej {barn.namn}!</h1>
+        {barn.tema === "lfc" && <FotbollIkon />}
+        <h1>{barn.tema === "lfc" ? `Kom igen, ${barn.namn}!` : `Hej ${barn.namn}!`}</h1>
         <p style={{ opacity: 0.95 }}>Fota en sida ur boken eller dina glosor, så gör din hjälplärare ett förhör.</p>
         <button className="pill" onClick={onBelo}>{beloKort(barn, belo)}</button>
       </div>
@@ -542,6 +553,7 @@ function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
 function beloKort(barn, belo) {
   if (barn.belo === "djur") return `Mina djur: ${belo.samling || 0}`;
   if (barn.belo === "klister") return `Mina klistermärken: ${belo.samling || 0}`;
+  if (barn.belo === "fotboll") return `Mina spelarkort: ${Math.min(belo.samling || 0, SPELARE.length)} av ${SPELARE.length}`;
   const d = dagarIRad(belo.dagar || []);
   return `${d} ${d === 1 ? "dag" : "dagar"} i rad`;
 }
@@ -553,6 +565,17 @@ function Vinst({ barn, vinst }) {
       <div className="vinst" style={{ background: barn.ljus }}>
         <strong style={{ fontSize: 28 }}>{vinst.dagar} {vinst.dagar === 1 ? "dag" : "dagar"} i rad</strong>
         {vinst.nyttMarke ? <span>Nytt märke: {vinst.nyttMarke} dagar i rad!</span> : <span>Träna imorgon också så växer kedjan.</span>}
+      </div>
+    );
+  }
+  if (vinst.typ === "fotboll") {
+    return (
+      <div className="vinst" style={{ background: barn.ljus }}>
+        <span style={{ fontWeight: 800 }}>{vinst.nya.length > 1 ? "Två nya spelarkort!" : "Nytt spelarkort!"}</span>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+          {vinst.nya.map((sp, i) => <SpelarKort key={i} spelare={sp} />)}
+        </div>
+        <span className="dov">Du har {Math.min(vinst.totalt, SPELARE.length)} av {SPELARE.length} spelare.</span>
       </div>
     );
   }
@@ -573,6 +596,24 @@ function Vinst({ barn, vinst }) {
 }
 
 function Beloningar({ barn, belo, onTillbaka }) {
+  if (barn.belo === "fotboll") {
+    const antal = belo.samling || 0;
+    return (
+      <main className="app">
+        <div className="topp lfc">
+          <button className="pill" onClick={onTillbaka}>Tillbaka</button>
+          <h1>Mitt lag</h1>
+          <p style={{ opacity: 0.95 }}>{Math.min(antal, SPELARE.length)} av {SPELARE.length} Liverpool-spelare. Ett nytt kort för varje förhör, två om du har minst 80 % rätt.</p>
+        </div>
+        <div className="sida">
+          <p className="dov">Du har gjort {belo.forhor || 0} förhör och tränat {(belo.dagar || []).length} olika dagar.</p>
+          <div className="spelargrid">
+            {SPELARE.map((sp, i) => <SpelarKort key={i} spelare={sp} last={i >= antal} />)}
+          </div>
+        </div>
+      </main>
+    );
+  }
   const lista = barn.belo === "djur" ? DJUR : barn.belo === "klister" ? KLISTER : null;
   const antal = belo.samling || 0;
   const dagar = dagarIRad(belo.dagar || []);
@@ -618,6 +659,30 @@ function Beloningar({ barn, belo, onTillbaka }) {
         )}
       </div>
     </main>
+  );
+}
+
+// Ett eget spelarkort (inga foton eller klubbmärken), i röd Liverpool-stil.
+function SpelarKort({ spelare, last = false }) {
+  const [namn, position, nummer, epok] = spelare;
+  if (last) {
+    return (
+      <div className="spelarkort last" aria-label="Okänd spelare">
+        <span className="nummer">?</span>
+        <span className="spnamn">Ej upplåst</span>
+      </div>
+    );
+  }
+  return (
+    <div className="spelarkort">
+      <svg viewBox="0 0 64 56" width="58" height="50" aria-hidden="true">
+        <path d="M20 4 L8 10 L2 24 L12 28 L14 22 L14 54 L50 54 L50 22 L52 28 L62 24 L56 10 L44 4 Q32 12 20 4 Z" fill="#fff" opacity="0.95" />
+        <text x="32" y="44" textAnchor="middle" fontSize="20" fontWeight="800" fill="#C8102E">{nummer || "★"}</text>
+      </svg>
+      <span className="spnamn">{namn}</span>
+      <span className="spinfo">{position}</span>
+      <span className="spinfo">{epok}</span>
+    </div>
   );
 }
 
