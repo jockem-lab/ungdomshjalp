@@ -167,3 +167,10 @@ body[data-tema="capy"] .fotoyta { border-radius: 28px; }
 .provkort { border-left: 6px solid; gap: 6px; }
 .forklaring { display: flex; flex-direction: column; gap: 8px; background: #F9FAFB; border-radius: 12px; padding: 12px; }
 .forklaring p { white-space: pre-line; }
+
+/* Koreanska (barn med koreanska: true) */
+.koreansk-rad { font-size: 14px; font-weight: 700; opacity: 0.9; margin-top: -4px; }
+.dagens-ord { border-width: 2px; border-style: solid; gap: 4px; }
+.hangul { font-size: 40px; font-weight: 800; line-height: 1.2; }
+.hangul-liten { font-weight: 800; font-size: 1.1em; }
+.pepp { margin-top: 6px; align-self: flex-start; background: rgba(255,255,255,0.7); border: 0; border-radius: 999px; padding: 6px 14px; font: inherit; font-weight: 700; cursor: pointer; }

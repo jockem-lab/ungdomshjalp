@@ -9,6 +9,7 @@ import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
 import { arDemo } from "../lib/demo";
 import { npForBarn } from "../lib/np";
 import { NIVAER, nivaNamn } from "../lib/niva";
+import { dagensUttryck, slumpa, PEPP_RATT, PEPP_FEL } from "../lib/koreanska";
 import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, tomBelo, dagarIRad, belona } from "../lib/belo";
 
 function lasLagrat(nyckel, standard) {
@@ -520,6 +521,7 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
         {barn.tema === "cheer" && <Pompom />}
         {barn.tema === "pop" && <Vinyl />}
         <h1>{halsning(barn)}</h1>
+        {barn.koreanska && <p className="koreansk-rad">안녕 = annyeong = hej på koreanska</p>}
         {barn.tema === "pop" && <Armband text={barn.namn} />}
         <p style={{ opacity: 0.95 }}>Fota en sida ur boken eller dina glosor, så gör din hjälplärare ett förhör.</p>
         <button className="pill" onClick={onBelo}>{beloKort(barn, belo)}</button>
@@ -534,6 +536,7 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
             <span className="dov" style={{ fontWeight: 600 }}>{np.iforvag ? `Inför åk ${np.ak}` : `Åk ${np.ak}`}: {np.amnen.slice(0, 3).join(", ")}{np.amnen.length > 3 ? " m.fl." : ""}</span>
           </button>
         )}
+        {barn.koreanska && <DagensOrd barn={barn} />}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <h2>Mina prov</h2>
           <button className="tabort" style={{ alignSelf: "auto" }} onClick={onProvschema}>{prov.length ? "Provschema" : "Lägg in prov"}</button>
@@ -748,7 +751,31 @@ function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
   );
 }
 
+function DagensOrd({ barn }) {
+  const [hangul, uttal, svenska] = dagensUttryck();
+  return (
+    <div className="kort dagens-ord" style={{ borderColor: barn.farg }}>
+      <span className="amne" style={{ color: barn.farg }}>Dagens koreanska</span>
+      <span className="hangul">{hangul}</span>
+      <span style={{ fontWeight: 800 }}>{uttal} · {svenska}</span>
+      <button className="liten-knapp" style={{ background: barn.ljus, alignSelf: "flex-start", padding: "8px 14px" }} onClick={() => lasUpp(hangul, "ko-KR")}>
+        <HogtalarIkon /> Lyssna
+      </button>
+    </div>
+  );
+}
+
+function Pepp({ barn, ratt }) {
+  const [p] = useState(() => slumpa(ratt ? PEPP_RATT : PEPP_FEL));
+  return (
+    <button type="button" className="pepp" onClick={() => lasUpp(p[0], "ko-KR")} title="Lyssna">
+      <span className="hangul-liten">{p[0]}</span> {p[1]} · {p[2]}
+    </button>
+  );
+}
+
 function halsning(barn) {
+  if (barn.koreanska) return `안녕, ${barn.namn}!`;
   if (barn.tema === "lfc") return `Kom igen, ${barn.namn}!`;
   if (barn.tema === "kpop") return `Annyeong, ${barn.namn}!`;
   if (barn.tema === "cheer") return `Go ${barn.namn}!`;
@@ -927,6 +954,7 @@ function Vinst({ barn, vinst, bilder }) {
         ))}
       </div>
       <span className="dov">Du har samlat {vinst.totalt} totalt.</span>
+      {barn.koreanska && <span style={{ fontWeight: 800 }}><span className="hangul-liten">대박!</span> daebak · Grymt jobbat!</span>}
     </div>
   );
 }
@@ -1508,6 +1536,7 @@ function Forhor({ barn, kod, forhor, bilder, onKlar, onAvbryt, onBelona }) {
             <div className={`svar ${rattSvar ? "ratt" : "fel-val"}`}>
               <strong style={{ fontSize: 18 }}>{rattSvar ? "Rätt!" : `Rätt svar: ${f.ratt}`}</strong>
               <span>{f.forklaring}</span>
+              {barn.koreanska && <Pepp key={nr} barn={barn} ratt={rattSvar} />}
             </div>
             <ForklaraIgen key={nr} barn={barn} kod={kod} fraga={f} mittSvar={valt} />
             <button className="knapp" onClick={nasta}>{nr + 1 >= fragor.length ? "Se resultat" : "Nästa fråga"}</button>
