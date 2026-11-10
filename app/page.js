@@ -3,7 +3,7 @@
 // Hela appen är en sida med flera "skärmar": login → välj barn → hem → fota → förhör.
 // Förhören sparas i webbläsaren på den enhet barnet använder (localStorage).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BARN, hittaBarn } from "../lib/barn";
 import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
 import { arDemo } from "../lib/demo";
@@ -249,6 +249,7 @@ export default function App() {
   const [wiki, setWiki] = useState({ logo: "", spelare: {} });
   const [prov, setProv] = useState([]); // barnets provschema
   const [startProv, setStartProv] = useState(null); // prov som barnet vill träna inför
+  const pass = useRef(null); // pågående träningspass, för föräldravyn
   const demo = arDemo(kod);
   const prefix = demo ? "demo-" : ""; // testläget sparar separat från barnens riktiga förhör
 
@@ -276,11 +277,51 @@ export default function App() {
     return vinst;
   }
 
+  // Mäter tiden för förhör och bläddrakort och skickar passet till föräldravyn när det är slut.
+  // Bara tid när sidan syns och barnet har rört skärmen de senaste 3 minuterna räknas.
+  useEffect(() => {
+    if (!kod || !barnId || !aktivt || (skarm !== "forhor" && skarm !== "kort")) return;
+    const p = {
+      start: Date.now(), sekunder: 0, senastAktiv: Date.now(), skickat: false, framsteg: {},
+      info: { typ: skarm, amne: aktivt.amneNamn || aktivt.amne || "", titel: aktivt.titel || "", lage: aktivt.lage || "", np: /^Nationellt prov/.test(aktivt.amneNamn || "") },
+    };
+    pass.current = p;
+    const aktiv = () => { p.senastAktiv = Date.now(); };
+    const tick = setInterval(() => {
+      if (document.visibilityState === "visible" && Date.now() - p.senastAktiv < 180000) p.sekunder += 5;
+    }, 5000);
+    const skicka = () => {
+      if (p.skickat || p.sekunder < 5) return;
+      p.skickat = true;
+      fetch("/api/logg", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kod, barnId, start: p.start, sekunder: p.sekunder, ...p.info, ...p.framsteg }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    window.addEventListener("pointerdown", aktiv);
+    window.addEventListener("keydown", aktiv);
+    window.addEventListener("pagehide", skicka);
+    return () => {
+      clearInterval(tick);
+      window.removeEventListener("pointerdown", aktiv);
+      window.removeEventListener("keydown", aktiv);
+      window.removeEventListener("pagehide", skicka);
+      skicka();
+      pass.current = null;
+    };
+  }, [skarm, aktivt?.id, barnId, kod]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function framsteg(f) {
+    if (pass.current) pass.current.framsteg = f;
+  }
+
   // Barnets tema (t.ex. Ediths capybara-känsla) sätts på hela sidan.
   useEffect(() => {
     const b = barnId ? hittaBarn(barnId) : null;
-    document.body.dataset.tema = b?.tema || "";
-  }, [barnId]);
+    document.body.dataset.tema = skarm === "valj" || skarm === "admin" ? "" : b?.tema || "";
+  }, [barnId, skarm]);
 
   useEffect(() => {
     const b = barnId ? hittaBarn(barnId) : null;
@@ -333,9 +374,12 @@ export default function App() {
 
   const barn = barnId ? hittaBarn(barnId) : null;
 
+  if (skarm === "admin") return <Foraldravy demo={demo} onTillbaka={() => setSkarm("valj")} />;
+
   if (!barn || skarm === "valj") {
     return (
       <Valj
+        onAdmin={() => setSkarm("admin")}
         onVal={(id) => { setBarnId(id); setSkarm("hem"); }}
         onLoggaUt={() => { sparaLagrat("familjekod", null); setKod(null); }}
       />
@@ -373,6 +417,7 @@ export default function App() {
         kod={kod}
         bilder={allaBilder}
         onBelona={geBelöning}
+        onFramsteg={framsteg}
         onKlar={(resultat) => {
           const lista = material.map((m) =>
             m.id === aktivt.id ? { ...m, senast: { ...resultat, datum: new Date().toISOString() } } : m
@@ -386,7 +431,7 @@ export default function App() {
   }
 
   if (skarm === "kort" && aktivt) {
-    return <Bladdrakort barn={barn} forhor={aktivt} bilder={allaBilder} onBelona={geBelöning} onKlar={() => setSkarm("hem")} />;
+    return <Bladdrakort barn={barn} forhor={aktivt} bilder={allaBilder} onBelona={geBelöning} onFramsteg={framsteg} onKlar={() => setSkarm("hem")} />;
   }
 
   if (skarm === "belo") {
@@ -480,7 +525,7 @@ function Login({ onKlar }) {
   );
 }
 
-function Valj({ onVal, onLoggaUt }) {
+function Valj({ onVal, onLoggaUt, onAdmin }) {
   return (
     <main className="app bred">
       <div className="sida">
@@ -497,7 +542,197 @@ function Valj({ onVal, onLoggaUt }) {
           </button>
         ))}
         </div>
-        <button className="tabort" onClick={onLoggaUt}>Logga ut den här enheten</button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button className="pill" onClick={onAdmin}>Föräldravy</button>
+          <button className="tabort" style={{ alignSelf: "auto" }} onClick={onLoggaUt}>Logga ut den här enheten</button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ---------- Föräldravy ----------
+
+function fmtTid(sek) {
+  const min = Math.round((sek || 0) / 60);
+  if (min < 1) return sek > 0 ? "< 1 min" : "0 min";
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h ${min % 60} min`;
+}
+
+function dagNyckel(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function sedanText(iso) {
+  if (!iso) return "Inte tränat än";
+  const dagar = Math.floor((new Date(dagNyckel(new Date()) + "T00:00:00") - new Date(dagNyckel(new Date(iso)) + "T00:00:00")) / 86400000);
+  if (dagar <= 0) return "Tränade idag";
+  if (dagar === 1) return "Tränade igår";
+  return `Tränade för ${dagar} dagar sedan`;
+}
+
+function passTyp(p) {
+  if (p.typ === "kort") return "Bläddrakort";
+  if (p.np) return "Nationellt prov";
+  return p.lage === "prov" ? "Provträning" : "Läxförhör";
+}
+
+function Foraldravy({ demo, onTillbaka }) {
+  const [adminkod, setAdminkod] = useState(() => {
+    try { return sessionStorage.getItem("adminkod") || ""; } catch { return ""; }
+  });
+  const [text, setText] = useState("");
+  const [data, setData] = useState(null);
+  const [fel, setFel] = useState("");
+  const [vantar, setVantar] = useState(false);
+  const [period, setPeriod] = useState(7);
+  const [visaBarn, setVisaBarn] = useState(null);
+
+  async function hamta(k) {
+    setVantar(true);
+    setFel("");
+    try {
+      const r = await fetch("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adminkod: k }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.fel || `Något gick fel (felkod ${r.status}).`);
+      setData(d);
+      setAdminkod(k);
+      try { sessionStorage.setItem("adminkod", k); } catch {}
+    } catch (e) {
+      setFel(e.message);
+      if (String(e.message).includes("Fel föräldrakod")) {
+        setAdminkod("");
+        try { sessionStorage.removeItem("adminkod"); } catch {}
+      }
+    }
+    setVantar(false);
+  }
+
+  useEffect(() => { if (adminkod) hamta(adminkod); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!data) {
+    return (
+      <main className="app">
+        <form className="sida" onSubmit={(e) => { e.preventDefault(); hamta(text.trim()); }}>
+          <button type="button" className="pill" onClick={onTillbaka}>Tillbaka</button>
+          <h1>Föräldravy</h1>
+          <p className="dov">Här ser ni vem som har tränat på vad och hur länge. Föräldrakoden är en egen kod som barnen inte känner till.</p>
+          <label className="etikett">
+            Föräldrakod
+            <input className="falt" type="password" value={text} onChange={(e) => setText(e.target.value)} autoFocus />
+          </label>
+          {demo && <p className="dov">I testläget är föräldrakoden "demo" och visar påhittade pass.</p>}
+          {fel && <p className="fel">{fel}</p>}
+          <button className="knapp" disabled={!text.trim() || vantar}>{vantar ? "Hämtar…" : "Visa översikten"}</button>
+        </form>
+      </main>
+    );
+  }
+
+  const nu = Date.now();
+  const iPeriod = (p) => period === 0 || nu - new Date(p.tid).getTime() < period * 86400000;
+  const sjuDagar = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    return d;
+  });
+  const statistik = BARN.map((b) => {
+    const alla = data.barn?.[b.id] || [];
+    const pass = alla.filter(iPeriod);
+    const sek = pass.reduce((s, p) => s + (p.sekunder || 0), 0);
+    const medRes = pass.filter((p) => p.antal > 0 && p.besvarade > 0);
+    const andel = medRes.length ? medRes.reduce((s, p) => s + p.ratt / Math.max(1, p.besvarade), 0) / medRes.length : null;
+    const perAmne = {};
+    for (const p of pass) perAmne[p.amne || "Övrigt"] = (perAmne[p.amne || "Övrigt"] || 0) + (p.sekunder || 0);
+    const perDag = sjuDagar.map((d) => alla.filter((p) => dagNyckel(new Date(p.tid)) === dagNyckel(d)).reduce((s, p) => s + (p.sekunder || 0), 0));
+    return { barn: b, pass, sek, andel, perAmne: Object.entries(perAmne).sort((x, y) => y[1] - x[1]), perDag, senast: alla[0]?.tid };
+  });
+  const maxDag = Math.max(600, ...statistik.flatMap((s) => s.perDag));
+  const lista = statistik
+    .flatMap((s) => s.pass.map((p) => ({ ...p, barn: s.barn })))
+    .filter((p) => !visaBarn || p.barn.id === visaBarn)
+    .sort((a, b) => b.tid.localeCompare(a.tid))
+    .slice(0, 60);
+  const dagNamn = ["sö", "må", "ti", "on", "to", "fr", "lö"];
+
+  return (
+    <main className="app bred">
+      <div className="sida">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <button className="pill" onClick={onTillbaka}>Tillbaka</button>
+          <button className="tabort" style={{ alignSelf: "auto" }} onClick={() => { try { sessionStorage.removeItem("adminkod"); } catch {} setData(null); setAdminkod(""); setText(""); }}>Lås föräldravyn</button>
+        </div>
+        <h1>Föräldravy</h1>
+        {data.demo && <p className="fel" style={{ background: "#FEF3C7", color: "#78350F" }}>Testläge: påhittade pass, inte barnens riktiga träning.</p>}
+        {!data.databas && (
+          <div className="kort">
+            <strong>Databasen är inte kopplad än</strong>
+            <p className="dov">Barnens träning sparas bara på varje mobil tills ni kopplar en databas i Vercel: Storage → Create Database → Upstash for Redis (gratis) → koppla till projektet → Redeploy. Därefter syns all ny träning här.</p>
+          </div>
+        )}
+        <div className="chips">
+          {[[7, "Senaste 7 dagarna"], [30, "Senaste 30 dagarna"], [0, "Allt"]].map(([v, t]) => (
+            <Chip key={v} aktiv={period === v} farg="#1F2937" onClick={() => setPeriod(v)}>{t}</Chip>
+          ))}
+        </div>
+        <div className="adminrutnat">
+          {statistik.map((s) => (
+            <div key={s.barn.id} className="kort adminkort" style={{ borderTop: `6px solid ${s.barn.farg}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span className="avatar" style={{ background: s.barn.farg, width: 40, height: 40, fontSize: 18 }}>{s.barn.namn[0]}</span>
+                <span style={{ display: "flex", flexDirection: "column" }}>
+                  <strong style={{ fontSize: 18 }}>{s.barn.namn}</strong>
+                  <span className="dov">{sedanText(s.senast)}</span>
+                </span>
+              </div>
+              <div className="nyckeltal">
+                <span><strong>{fmtTid(s.sek)}</strong><span className="dov">tid</span></span>
+                <span><strong>{s.pass.length}</strong><span className="dov">pass</span></span>
+                <span><strong>{s.andel === null ? "–" : `${Math.round(s.andel * 100)} %`}</strong><span className="dov">rätt</span></span>
+              </div>
+              <div className="dagstaplar" aria-label="Minuter per dag, senaste veckan">
+                {s.perDag.map((sek, i) => (
+                  <span key={i} title={`${fmtTid(sek)}`}>
+                    <span className="stapelyta"><span style={{ height: `${Math.max(sek > 0 ? 6 : 0, (sek / maxDag) * 100)}%`, background: s.barn.farg }} /></span>
+                    <span className="dagnamn">{dagNamn[sjuDagar[i].getDay()]}</span>
+                  </span>
+                ))}
+              </div>
+              {s.perAmne.length > 0 ? (
+                <div className="amnesrader">
+                  {s.perAmne.slice(0, 5).map(([amne, sek]) => (
+                    <span key={amne}><span>{amne}</span><span className="dov">{fmtTid(sek)}</span></span>
+                  ))}
+                </div>
+              ) : <p className="dov">Ingen träning under perioden.</p>}
+            </div>
+          ))}
+        </div>
+        <h2>Senaste passen</h2>
+        <div className="chips">
+          <Chip aktiv={!visaBarn} farg="#1F2937" onClick={() => setVisaBarn(null)}>Alla</Chip>
+          {BARN.map((b) => <Chip key={b.id} aktiv={visaBarn === b.id} farg={b.farg} onClick={() => setVisaBarn(b.id)}>{b.namn}</Chip>)}
+        </div>
+        {lista.length === 0 && <p className="dov">Inga pass under perioden.</p>}
+        <div className="passlista">
+          {lista.map((p, i) => (
+            <div key={i} className="passrad" style={{ borderLeftColor: p.barn.farg }}>
+              <span className="dov" style={{ minWidth: 92 }}>{new Date(p.tid).toLocaleDateString("sv-SE", { day: "numeric", month: "short" })} {new Date(p.tid).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <strong>{p.barn.namn} · {p.amne || "Övrigt"}</strong>
+                <span className="dov" style={{ display: "block" }}>{passTyp(p)}{p.titel ? ` · ${p.titel}` : ""}</span>
+              </span>
+              <span style={{ textAlign: "right" }}>
+                <strong>{fmtTid(p.sekunder)}</strong>
+                <span className="dov" style={{ display: "block" }}>
+                  {p.antal ? (p.klar ? `${p.ratt} av ${p.antal} rätt` : `Avbröt efter ${p.besvarade} av ${p.antal}`) : ""}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <button className="tabort" onClick={() => hamta(adminkod)}>{vantar ? "Hämtar…" : "Uppdatera"}</button>
       </div>
     </main>
   );
@@ -1123,7 +1358,7 @@ function gorKort(forhor) {
   });
 }
 
-function Bladdrakort({ barn, forhor, bilder, onBelona, onKlar }) {
+function Bladdrakort({ barn, forhor, bilder, onBelona, onKlar, onFramsteg }) {
   const [hog, setHog] = useState(() => gorKort(forhor));
   const [vand, setVand] = useState(false);
   const [kunde, setKunde] = useState(0);
@@ -1131,6 +1366,9 @@ function Bladdrakort({ barn, forhor, bilder, onBelona, onKlar }) {
   const [forsta, setForsta] = useState(new Set());
   const [klar, setKlar] = useState(false);
   const [vinst, setVinst] = useState(null);
+  useEffect(() => {
+    onFramsteg?.({ antal: totalt, ratt: kunde, besvarade: totalt - hog.length, klar });
+  }, [kunde, klar, hog.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const [uttal, setUttal] = useState("");
   const [lyssnar, setLyssnar] = useState(false);
   const kort = hog[0];
@@ -1418,7 +1656,7 @@ function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onF
   );
 }
 
-function Forhor({ barn, kod, forhor, bilder, onKlar, onAvbryt, onBelona }) {
+function Forhor({ barn, kod, forhor, bilder, onKlar, onAvbryt, onBelona, onFramsteg }) {
   const [vinst, setVinst] = useState(null);
   const [lyssnar, setLyssnar] = useState(false);
   const [talFel, setTalFel] = useState("");
@@ -1434,6 +1672,11 @@ function Forhor({ barn, kod, forhor, bilder, onKlar, onAvbryt, onBelona }) {
 
   const fragor = forhor.fragor;
   const f = fragor[nr];
+
+  // Berättar för föräldravyn hur långt barnet har kommit.
+  useEffect(() => {
+    onFramsteg?.({ antal: fragor.length, ratt: antalRatt, besvarade: klar ? fragor.length : nr + (valt !== null ? 1 : 0), klar });
+  }, [nr, antalRatt, valt, klar]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (intro) {
     return (
