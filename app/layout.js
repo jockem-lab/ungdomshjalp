@@ -3,6 +3,7 @@ import "./globals.css";
 export const metadata = {
   title: "Läxhjälpen",
   description: "Barnens egna hjälplärare",
+  appleWebApp: { capable: true, title: "Läxhjälpen", statusBarStyle: "default" },
 };
 
 export const viewport = {

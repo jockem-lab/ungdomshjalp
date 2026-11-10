@@ -482,10 +482,11 @@ function Login({ onKlar }) {
 
 function Valj({ onVal, onLoggaUt }) {
   return (
-    <main className="app">
+    <main className="app bred">
       <div className="sida">
         <p className="liten-rubrik">Läxhjälpen</p>
         <h1>Vem tränar idag?</h1>
+        <div className="barnlista">
         {BARN.map((b) => (
           <button key={b.id} className="barnknapp" style={{ borderColor: b.ljus }} onClick={() => onVal(b.id)}>
             <span className="avatar" style={{ background: b.farg }}>{b.namn[0]}</span>
@@ -495,6 +496,7 @@ function Valj({ onVal, onLoggaUt }) {
             </span>
           </button>
         ))}
+        </div>
         <button className="tabort" onClick={onLoggaUt}>Logga ut den här enheten</button>
       </div>
     </main>
@@ -513,7 +515,7 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
   const visade = filter ? material.filter((m) => amnesEtikett(m) === filter) : material;
 
   return (
-    <main className="app">
+    <main className="app bred">
       <div className={`topp ${barn.tema || ""}`} style={barn.tema ? undefined : { background: barn.farg }}>
         {barn.tema === "capy" && <Capybara className="capy-bild" storlek={120} />}
         <button className="pill" onClick={onByt}>Byt person</button>
@@ -527,7 +529,8 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
         <p style={{ opacity: 0.95 }}>Fota boken eller ladda upp en fil, så gör din hjälplärare ett förhör.</p>
         <button className="pill" onClick={onBelo}>{beloKort(barn, belo)}</button>
       </div>
-      <div className="sida">
+      <div className="sida tva-kolumner">
+        <div className="kolumn">
         <button className="knapp" onClick={onFota}>
           <KameraIkon /> Ny läxa eller prov
         </button>
@@ -551,6 +554,8 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
             <button className="liten-knapp" style={{ background: barn.ljus, alignSelf: "flex-start", padding: "8px 16px" }} onClick={() => onTranaProv(p)}>Träna inför provet</button>
           </div>
         ))}
+        </div>
+        <div className="kolumn">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <h2>Mina hjälplärare</h2>
           <button className="tabort" style={{ alignSelf: "auto" }} onClick={onAmnen}>Mina ämnen</button>
@@ -563,7 +568,7 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
             ))}
           </div>
         )}
-        {material.length === 0 && <p className="dov">Här hamnar allt du fotar. Börja med knappen ovanför.</p>}
+        {material.length === 0 && <p className="dov">Här hamnar dina förhör. Börja med "Ny läxa eller prov".</p>}
         {visade.map((m) => (
           <div className="kort" key={m.id}>
             <span className="amne" style={{ color: barn.farg }}>{amnesEtikett(m)} · {m.lage === "prov" ? "Provträning" : "Läxförhör"}{m.niva && m.niva !== "blandat" ? ` · ${nivaNamn(m.niva, barn.arskurs)}` : ""}</span>
@@ -583,6 +588,7 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
             <button className="tabort" onClick={() => confirm("Ta bort det här förhöret?") && onTaBort(m.id)}>Ta bort</button>
           </div>
         ))}
+        </div>
       </div>
     </main>
   );
@@ -1329,10 +1335,12 @@ function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onF
   }
 
   return (
-    <main className="app">
+    <main className="app bred">
       <div className="sida">
         <button className="pill" onClick={onTillbaka}>Tillbaka</button>
         <h1>Lägg till ditt material</h1>
+        <div className="tva-kolumner">
+        <div className="kolumn">
         <div className="rad">
           <label className="fotoyta" style={{ borderColor: barn.farg, background: barn.ljus }}>
             <KameraIkon storlek={36} />
@@ -1369,6 +1377,8 @@ function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onF
             ))}
           </div>
         )}
+        </div>
+        <div className="kolumn">
         <span style={{ fontWeight: 800, fontSize: 15 }}>Vilket ämne?</span>
         <div className="chips">
           {amnen.map((a) => (
@@ -1401,6 +1411,8 @@ function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onF
         <button className="knapp" style={{ background: barn.farg, marginTop: "auto" }} disabled={!harMaterial || laser || !amne} onClick={skapa}>
           Skapa min hjälplärare
         </button>
+        </div>
+        </div>
       </div>
     </main>
   );
@@ -1560,12 +1572,12 @@ function Forhor({ barn, kod, forhor, bilder, onKlar, onAvbryt, onBelona }) {
             {!besvarad && <button className="knapp" style={{ background: barn.farg }} disabled={!skrivet.trim()}>Svara</button>}
           </form>
         ) : (
-          (f.alternativ || []).map((a) => (
+          <div className="altlista">{(f.alternativ || []).map((a) => (
             <button key={a} onClick={() => svara(a)}
               className={`alt ${besvarad && a === f.ratt ? "ratt" : ""} ${besvarad && a === valt && a !== f.ratt ? "fel-val" : ""}`}>
               {a}
             </button>
-          ))
+          ))}</div>
         )}
 
         {besvarad && (

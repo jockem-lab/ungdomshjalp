@@ -180,3 +180,44 @@ body[data-tema="capy"] .fotoyta { border-radius: 28px; }
 .filrad { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; font-weight: 700; }
 .filrad .filnamn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .filrad button { width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(0,0,0,0.6); color: #fff; font-weight: 800; flex: 0 0 auto; }
+
+/* Mobil: kolumnerna staplas som vanligt */
+.kolumn, .barnlista, .altlista { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.altlista { gap: 10px; }
+.tva-kolumner { display: flex; flex-direction: column; gap: 18px; }
+
+
+/* iPad och andra surfplattor */
+@media (min-width: 700px) {
+  .app { max-width: 780px; }
+  .topp { padding: 36px 40px 30px; border-radius: 0 0 36px 36px; }
+  .sida { padding: 36px 40px 40px; gap: 20px; }
+  h1 { font-size: 36px; }
+  h2 { font-size: 19px; }
+  .dov { font-size: 15px; }
+  .fraga { font-size: 26px; }
+  .alt { font-size: 19px; min-height: 64px; padding: 18px 20px; }
+  .knapp { min-height: 62px; font-size: 18px; }
+  .barnlista { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .barnknapp { min-height: 92px; }
+  .samling { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .spelargrid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .miniatyrer { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .fotoyta { min-height: 170px; }
+}
+
+/* Bredare skärm (iPad på längden och liggande): två kolumner där det passar */
+@media (min-width: 800px) {
+  .app.bred { max-width: 1180px; }
+  .tva-kolumner { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 36px; align-items: start; }
+  .sida.tva-kolumner { padding-top: 36px; }
+}
+
+/* Liggande läge: svarsalternativen bredvid varandra */
+@media (min-width: 900px) and (orientation: landscape) {
+  .altlista { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .barnlista { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app.bred .topp { padding-left: 48px; padding-right: 48px; }
+}
+.barnknapp > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+@media (min-width: 700px) and (max-width: 799px) { .app.bred { max-width: 780px; } }
