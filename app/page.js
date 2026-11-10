@@ -99,7 +99,7 @@ function lasUpp(text, sprak = "sv-SE") {
     u.lang = sprak || "sv-SE";
     const rost = window.speechSynthesis.getVoices().find((v) => v.lang.replace("_", "-").startsWith(u.lang.slice(0, 2)));
     if (rost) u.voice = rost;
-    u.rate = sprak && sprak !== "sv-SE" ? 0.85 : 0.95;
+    u.rate = sprak && sprak !== "sv-SE" ? 0.75 : 0.85; // lugnt tempo så att det hinns med
     window.speechSynthesis.speak(u);
   } catch {}
 }
@@ -150,6 +150,66 @@ function Capybara({ storlek = 120, className = "" }) {
   );
 }
 
+function Ljusstav() {
+  return (
+    <svg className="tema-bild" viewBox="0 0 80 110" width="70" height="96" aria-hidden="true">
+      <defs>
+        <radialGradient id="glod" cx="50%" cy="40%" r="60%">
+          <stop offset="0" stopColor="#fff" /><stop offset="0.5" stopColor="#F9A8D4" /><stop offset="1" stopColor="#C084FC" />
+        </radialGradient>
+      </defs>
+      <circle cx="40" cy="34" r="30" fill="#F0ABFC" opacity="0.35" />
+      <circle cx="40" cy="34" r="22" fill="url(#glod)" stroke="#fff" strokeWidth="3" />
+      <path d="M40 22 l3 7 7 1 -5 5 1 7 -6 -3 -6 3 1 -7 -5 -5 7 -1z" fill="#fff" />
+      <rect x="34" y="56" width="12" height="46" rx="6" fill="#fff" />
+      <rect x="34" y="70" width="12" height="6" fill="#E879F9" />
+    </svg>
+  );
+}
+
+function Pompom() {
+  const tofs = (cx, cy, farg) => (
+    <g>
+      {Array.from({ length: 14 }).map((_, i) => {
+        const v = (i / 14) * Math.PI * 2;
+        return <path key={i} d={`M${cx} ${cy} L${cx + Math.cos(v) * 26} ${cy + Math.sin(v) * 26}`} stroke={farg} strokeWidth="7" strokeLinecap="round" />;
+      })}
+      <circle cx={cx} cy={cy} r="12" fill={farg} />
+    </g>
+  );
+  return (
+    <svg className="tema-bild" viewBox="0 0 120 90" width="110" height="82" aria-hidden="true">
+      {tofs(38, 42, "#F472B6")}
+      {tofs(82, 48, "#fff")}
+    </svg>
+  );
+}
+
+function Vinyl({ namn }) {
+  return (
+    <svg className="tema-bild" viewBox="0 0 110 110" width="96" height="96" aria-hidden="true">
+      <circle cx="55" cy="55" r="50" fill="#1F1235" />
+      {[42, 34, 26].map((r) => <circle key={r} cx="55" cy="55" r={r} fill="none" stroke="#3B2A5C" strokeWidth="1.5" />)}
+      <circle cx="55" cy="55" r="16" fill="#F0ABFC" />
+      <circle cx="55" cy="55" r="3" fill="#1F1235" />
+      <path d="M90 18 v22 a6 6 0 1 1 -3 -5 V22 l10 -3 v5z" fill="#FDE68A" />
+    </svg>
+  );
+}
+
+// Vänskapsarmband med barnets namn i pärlor.
+function Armband({ text }) {
+  const farger = ["#F9A8D4", "#C4B5FD", "#FDE68A", "#A5F3FC", "#FBCFE8"];
+  return (
+    <div className="armband" aria-label={`Armband: ${text}`}>
+      {text.toUpperCase().split("").map((b, i) => (
+        <span key={i} className="parla bokstav">{b}</span>
+      )).reduce((acc, el, i) => [...acc, <span key={`p${i}`} className="parla" style={{ background: farger[i % farger.length] }} />, el], [])}
+      <span className="parla" style={{ background: farger[0] }} />
+    </div>
+  );
+}
+
 function FotbollIkon() {
   return (
     <svg className="fotboll" viewBox="0 0 48 48" width="56" height="56" aria-hidden="true">
@@ -185,6 +245,8 @@ export default function App() {
   const [belo, setBelo] = useState(tomBelo());
   const [bilder, setBilder] = useState({ logo: "", spelare: {} }); // egna bilder, bara på den här enheten
   const [wiki, setWiki] = useState({ logo: "", spelare: {} });
+  const [prov, setProv] = useState([]); // barnets provschema
+  const [startProv, setStartProv] = useState(null); // prov som barnet vill träna inför
   const demo = arDemo(kod);
   const prefix = demo ? "demo-" : ""; // testläget sparar separat från barnens riktiga förhör
 
@@ -198,6 +260,7 @@ export default function App() {
       setMaterial(lasLagrat(`${prefix}material-${barnId}`, []));
       setAmnen(lasLagrat(`${prefix}amnen-${barnId}`, STANDARD_AMNEN));
       setBelo(lasLagrat(`${prefix}belo-${barnId}`, tomBelo()));
+      setProv(lasLagrat(`${prefix}prov-${barnId}`, []));
       setBilder(lasLagrat(`bilder-${barnId}`, { logo: "", spelare: {} }));
     }
   }, [barnId, prefix]);
@@ -227,6 +290,11 @@ export default function App() {
     logo: bilder.logo || wiki.logo,
     spelare: { ...wiki.spelare, ...(bilder.spelare || {}) },
   };
+
+  function uppdateraProv(lista) {
+    setProv(lista);
+    sparaLagrat(`${prefix}prov-${barnId}`, lista);
+  }
 
   function uppdateraBilder(ny) {
     setBilder(ny);
@@ -272,10 +340,15 @@ export default function App() {
     );
   }
 
+  if (skarm === "prov") {
+    return <Provschema barn={barn} amnen={amnen} prov={prov} onSpara={uppdateraProv} onTillbaka={() => setSkarm("hem")} />;
+  }
+
   if (skarm === "fota") {
     return (
       <Fota
         barn={barn}
+        startProv={startProv}
         kod={kod}
         amnen={amnen}
         onNyttAmne={(a) => uppdateraAmnen([...amnen, a])}
@@ -295,6 +368,7 @@ export default function App() {
       <Forhor
         barn={barn}
         forhor={aktivt}
+        kod={kod}
         bilder={allaBilder}
         onBelona={geBelöning}
         onKlar={(resultat) => {
@@ -356,7 +430,10 @@ export default function App() {
       onBelo={() => setSkarm("belo")}
       onKort={(m) => { setAktivt(m); setSkarm("kort"); }}
       onByt={() => setSkarm("valj")}
-      onFota={() => setSkarm("fota")}
+      onFota={() => { setStartProv(null); setSkarm("fota"); }}
+      prov={prov}
+      onProvschema={() => setSkarm("prov")}
+      onTranaProv={(p) => { setStartProv(p); setSkarm("fota"); }}
       onStarta={(m) => { setAktivt(m); setSkarm("forhor"); }}
       onTaBort={(id) => uppdateraMaterial(material.filter((m) => m.id !== id))}
     />
@@ -426,7 +503,8 @@ function amnesEtikett(m) {
   return m.amneNamn || m.amne || "Övrigt";
 }
 
-function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp, belo, bilder, onBelo, onKort }) {
+function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp, belo, bilder, onBelo, onKort, prov = [], onProvschema, onTranaProv }) {
+  const kommande = kommandeProv(prov).slice(0, 3);
   const np = npForBarn(barn.arskurs);
   const [filter, setFilter] = useState(null);
   const amnesNamn = [...new Set(material.map(amnesEtikett))];
@@ -438,7 +516,11 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
         {barn.tema === "capy" && <Capybara className="capy-bild" storlek={120} />}
         <button className="pill" onClick={onByt}>Byt person</button>
         {barn.tema === "lfc" && (bilder?.logo ? <img className="klubblogo" src={bilder.logo} alt="Klubbmärke" /> : <FotbollIkon />)}
-        <h1>{barn.tema === "lfc" ? `Kom igen, ${barn.namn}!` : `Hej ${barn.namn}!`}</h1>
+        {barn.tema === "kpop" && <Ljusstav />}
+        {barn.tema === "cheer" && <Pompom />}
+        {barn.tema === "pop" && <Vinyl />}
+        <h1>{halsning(barn)}</h1>
+        {barn.tema === "pop" && <Armband text={barn.namn} />}
         <p style={{ opacity: 0.95 }}>Fota en sida ur boken eller dina glosor, så gör din hjälplärare ett förhör.</p>
         <button className="pill" onClick={onBelo}>{beloKort(barn, belo)}</button>
       </div>
@@ -452,6 +534,19 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
             <span className="dov" style={{ fontWeight: 600 }}>{np.iforvag ? `Inför åk ${np.ak}` : `Åk ${np.ak}`}: {np.amnen.slice(0, 3).join(", ")}{np.amnen.length > 3 ? " m.fl." : ""}</span>
           </button>
         )}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <h2>Mina prov</h2>
+          <button className="tabort" style={{ alignSelf: "auto" }} onClick={onProvschema}>{prov.length ? "Provschema" : "Lägg in prov"}</button>
+        </div>
+        {kommande.length === 0 && <p className="dov">Inga prov inlagda. Lägg in dina prov så påminner jag dig och hjälper dig träna i tid.</p>}
+        {kommande.map((p) => (
+          <div className="kort provkort" key={p.id} style={{ borderLeftColor: barn.farg }}>
+            <span className="amne" style={{ color: barn.farg }}>{p.amne} · {dagarKvarText(p.datum)}</span>
+            <span style={{ fontWeight: 800 }}>{p.vad || `Prov i ${p.amne}`}</span>
+            <span className="dov">{formatDatum(p.datum)}</span>
+            <button className="liten-knapp" style={{ background: barn.ljus, alignSelf: "flex-start", padding: "8px 16px" }} onClick={() => onTranaProv(p)}>Träna inför provet</button>
+          </div>
+        ))}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <h2>Mina hjälplärare</h2>
           <button className="tabort" style={{ alignSelf: "auto" }} onClick={onAmnen}>Mina ämnen</button>
@@ -650,6 +745,144 @@ function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
         </button>
       </div>
     </main>
+  );
+}
+
+function halsning(barn) {
+  if (barn.tema === "lfc") return `Kom igen, ${barn.namn}!`;
+  if (barn.tema === "kpop") return `Annyeong, ${barn.namn}!`;
+  if (barn.tema === "cheer") return `Go ${barn.namn}!`;
+  return `Hej ${barn.namn}!`;
+}
+
+function idagStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function dagarKvar(datum) {
+  return Math.round((new Date(datum + "T12:00:00") - new Date(idagStr() + "T12:00:00")) / 86400000);
+}
+function dagarKvarText(datum) {
+  const n = dagarKvar(datum);
+  if (n === 0) return "idag!";
+  if (n === 1) return "imorgon";
+  return `om ${n} dagar`;
+}
+function formatDatum(datum) {
+  try {
+    return new Date(datum + "T12:00:00").toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "long" });
+  } catch {
+    return datum;
+  }
+}
+function kommandeProv(prov) {
+  return prov.filter((p) => dagarKvar(p.datum) >= 0).sort((a, b) => a.datum.localeCompare(b.datum));
+}
+
+function Provschema({ barn, amnen, prov, onSpara, onTillbaka }) {
+  const [amne, setAmne] = useState(amnen[0]?.namn || "");
+  const [datum, setDatum] = useState("");
+  const [vad, setVad] = useState("");
+  const kommande = kommandeProv(prov);
+  const gamla = prov.filter((p) => dagarKvar(p.datum) < 0);
+
+  function lagg(e) {
+    e.preventDefault();
+    if (!amne || !datum) return;
+    onSpara([...prov, { id: Date.now().toString(36), amne, datum, vad: vad.trim().slice(0, 120) }]);
+    setVad("");
+    setDatum("");
+  }
+
+  return (
+    <main className="app">
+      <div className="sida">
+        <button className="pill" onClick={onTillbaka}>Tillbaka</button>
+        <h1>Mitt provschema</h1>
+        <form className="kort" onSubmit={lagg}>
+          <span style={{ fontWeight: 800 }}>Lägg in ett prov</span>
+          <div className="chips">
+            {amnen.map((a) => (
+              <Chip key={a.id} aktiv={amne === a.namn} farg={barn.farg} onClick={() => setAmne(a.namn)}>{a.namn}</Chip>
+            ))}
+          </div>
+          <label className="etikett">
+            Datum
+            <input className="falt" type="date" value={datum} min={idagStr()} onChange={(e) => setDatum(e.target.value)} />
+          </label>
+          <label className="etikett">
+            Vad handlar provet om? (valfritt)
+            <input className="falt" value={vad} onChange={(e) => setVad(e.target.value)} placeholder="t.ex. kapitel 4, vikingatiden" />
+          </label>
+          <button className="knapp" style={{ background: barn.farg }} disabled={!amne || !datum}>Spara provet</button>
+        </form>
+        {kommande.map((p) => (
+          <div className="kort provkort" key={p.id} style={{ borderLeftColor: barn.farg, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <strong>{p.amne} · {dagarKvarText(p.datum)}</strong>
+              <span className="dov">{formatDatum(p.datum)}{p.vad ? ` · ${p.vad}` : ""}</span>
+            </span>
+            <button className="tabort" style={{ alignSelf: "auto" }} onClick={() => onSpara(prov.filter((x) => x.id !== p.id))}>Ta bort</button>
+          </div>
+        ))}
+        {gamla.length > 0 && (
+          <button className="tabort" onClick={() => onSpara(prov.filter((p) => dagarKvar(p.datum) >= 0))}>Rensa gamla prov ({gamla.length})</button>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function ForklaraIgen({ barn, kod, fraga, mittSvar }) {
+  const [oppen, setOppen] = useState(false);
+  const [undran, setUndran] = useState("");
+  const [svar, setSvar] = useState([]);
+  const [vantar, setVantar] = useState(false);
+  const [fel, setFel] = useState("");
+
+  async function fraga_() {
+    setVantar(true);
+    setFel("");
+    try {
+      const r = await fetch("/api/forklara", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kod, barnId: barn.id, fraga, mittSvar, undran }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.fel || "Något gick fel.");
+      setSvar((s) => [...s, d.text]);
+      setUndran("");
+    } catch (e) {
+      setFel(e.message);
+    }
+    setVantar(false);
+  }
+
+  if (!oppen) {
+    return (
+      <button className="knapp ram" onClick={() => setOppen(true)}>Förklara igen</button>
+    );
+  }
+  return (
+    <div className="kort">
+      {svar.map((t, i) => (
+        <div key={i} className="forklaring">
+          <p>{t}</p>
+          <button className="liten-knapp" style={{ background: barn.ljus, alignSelf: "flex-start", padding: "8px 14px" }} onClick={() => lasUpp(t)}>
+            <HogtalarIkon /> Läs upp
+          </button>
+        </div>
+      ))}
+      <label className="etikett">
+        {svar.length ? "Vill du fråga något mer?" : "Vad är det du inte förstår? (valfritt)"}
+        <input className="falt" value={undran} onChange={(e) => setUndran(e.target.value)} placeholder="t.ex. varför blir det 12?" />
+      </label>
+      {fel && <p className="fel">{fel}</p>}
+      <button className="knapp" style={{ background: barn.farg }} disabled={vantar} onClick={fraga_}>
+        {vantar ? "Hjälpläraren tänker…" : svar.length ? "Fråga igen" : "Förklara på ett annat sätt"}
+      </button>
+    </div>
   );
 }
 
@@ -975,13 +1208,15 @@ function Amnen({ barn, amnen, onTillbaka, onLaggTill, onTaBort }) {
   );
 }
 
-function Fota({ barn, kod, amnen, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
+function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
   const [bilder, setBilder] = useState([]);
-  const [lage, setLage] = useState("forhor");
-  const [anteckning, setAnteckning] = useState("");
+  const [lage, setLage] = useState(startProv ? "prov" : "forhor");
+  const [anteckning, setAnteckning] = useState(startProv?.vad || "");
   const [vantar, setVantar] = useState(false);
   const [fel, setFel] = useState("");
-  const [amneId, setAmneId] = useState(null);
+  const [amneId, setAmneId] = useState(() =>
+    startProv ? amnen.find((a) => a.namn.toLowerCase() === String(startProv.amne).toLowerCase())?.id || null : null
+  );
   const [niva, setNiva] = useState("blandat");
   const [nyttAmne, setNyttAmne] = useState(false);
   const amne = amnen.find((a) => a.id === amneId);
@@ -1106,7 +1341,7 @@ function Fota({ barn, kod, amnen, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
   );
 }
 
-function Forhor({ barn, forhor, bilder, onKlar, onAvbryt, onBelona }) {
+function Forhor({ barn, kod, forhor, bilder, onKlar, onAvbryt, onBelona }) {
   const [vinst, setVinst] = useState(null);
   const [lyssnar, setLyssnar] = useState(false);
   const [talFel, setTalFel] = useState("");
@@ -1274,6 +1509,7 @@ function Forhor({ barn, forhor, bilder, onKlar, onAvbryt, onBelona }) {
               <strong style={{ fontSize: 18 }}>{rattSvar ? "Rätt!" : `Rätt svar: ${f.ratt}`}</strong>
               <span>{f.forklaring}</span>
             </div>
+            <ForklaraIgen key={nr} barn={barn} kod={kod} fraga={f} mittSvar={valt} />
             <button className="knapp" onClick={nasta}>{nr + 1 >= fragor.length ? "Se resultat" : "Nästa fråga"}</button>
           </>
         )}

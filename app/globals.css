@@ -130,3 +130,40 @@ body[data-tema="capy"] .chip, body[data-tema="capy"] .liten-knapp, body[data-tem
 body[data-tema="capy"] .alt { border-color: #F0E2D0; }
 body[data-tema="capy"] .samlad { border-radius: 22px; border-color: #F0E2D0; }
 body[data-tema="capy"] .fotoyta { border-radius: 28px; }
+
+/* Gemensamt för tema-bilder i sidhuvudet */
+.topp.kpop, .topp.cheer, .topp.pop { position: relative; overflow: hidden; padding-right: 120px; }
+.topp .tema-bild { position: absolute; right: 16px; top: 22px; }
+
+/* Emmy: K-pop – rosa/lila neon och glitter */
+.topp.kpop {
+  background:
+    radial-gradient(circle at 85% 20%, rgba(255,255,255,0.35) 0 2px, transparent 3px) 0 0 / 38px 38px,
+    radial-gradient(circle at 30% 70%, rgba(255,255,255,0.28) 0 1.5px, transparent 2.5px) 0 0 / 52px 52px,
+    linear-gradient(135deg, #EC4899 0%, #C026D3 50%, #7C3AED 100%);
+}
+.topp.kpop h1 { text-shadow: 0 0 14px rgba(255, 255, 255, 0.55); letter-spacing: 0.01em; }
+.topp.kpop .tema-bild { transform: rotate(14deg); filter: drop-shadow(0 0 10px #fff); }
+
+/* Elina: cheerleading – marinblått, rosa och glitter */
+.topp.cheer {
+  background:
+    radial-gradient(circle, rgba(255,255,255,0.5) 0 1.5px, transparent 2.5px) 0 0 / 30px 30px,
+    linear-gradient(160deg, #1E3A8A 0%, #312E81 60%, #BE185D 140%);
+  border-bottom: 6px solid #F472B6;
+}
+.topp.cheer h1 { text-transform: uppercase; letter-spacing: 0.04em; font-style: italic; }
+
+/* Julie: popmusik – midnattslila, skivor och vänskapsarmband */
+.topp.pop {
+  background:
+    radial-gradient(circle at 80% 30%, rgba(253,230,138,0.6) 0 1.5px, transparent 2.5px) 0 0 / 44px 44px,
+    linear-gradient(150deg, #2E1065 0%, #6D28D9 70%, #DB2777 140%);
+}
+.armband { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.parla { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+.parla.bokstav { width: 22px; height: 22px; background: #fff; color: #4C1D95; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+
+.provkort { border-left: 6px solid; gap: 6px; }
+.forklaring { display: flex; flex-direction: column; gap: 8px; background: #F9FAFB; border-radius: 12px; padding: 12px; }
+.forklaring p { white-space: pre-line; }
