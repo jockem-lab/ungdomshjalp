@@ -9,6 +9,7 @@ import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
 import { arDemo } from "../lib/demo";
 import { npForBarn } from "../lib/np";
 import { NIVAER, nivaNamn } from "../lib/niva";
+import { lasFil, FIL_ACCEPT } from "../lib/filer";
 import { dagensUttryck, slumpa, PEPP_RATT, PEPP_FEL } from "../lib/koreanska";
 import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, tomBelo, dagarIRad, belona } from "../lib/belo";
 
@@ -1238,6 +1239,8 @@ function Amnen({ barn, amnen, onTillbaka, onLaggTill, onTaBort }) {
 
 function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
   const [bilder, setBilder] = useState([]);
+  const [filer, setFiler] = useState([]); // PDF, Word och PowerPoint
+  const [laser, setLaser] = useState(false);
   const [lage, setLage] = useState(startProv ? "prov" : "forhor");
   const [anteckning, setAnteckning] = useState(startProv?.vad || "");
   const [vantar, setVantar] = useState(false);
@@ -1256,6 +1259,29 @@ function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onF
     setBilder((gamla) => [...gamla, ...nya].slice(0, 6));
   }
 
+  async function laggTillFil(e) {
+    const valda = Array.from(e.target.files || []);
+    e.target.value = "";
+    setFel("");
+    setLaser(true);
+    const nya = [];
+    for (const f of valda) {
+      try { nya.push(await lasFil(f)); } catch (err) { setFel(err.message); }
+    }
+    setLaser(false);
+    setFiler((gamla) => {
+      const alla = [...gamla, ...nya];
+      let pdf = 0;
+      // Högst 3 filer och högst en PDF, så att allt får plats i ett anrop.
+      return alla.filter((f) => (f.typ === "pdf" ? ++pdf <= 1 : true)).slice(0, 3);
+    });
+    if (nya.filter((f) => f.typ === "pdf").length + filer.filter((f) => f.typ === "pdf").length > 1) {
+      setFel("Du kan bara ha en PDF åt gången.");
+    }
+  }
+
+  const harMaterial = bilder.length + filer.length > 0;
+
   async function skapa() {
     setVantar(true);
     setFel("");
@@ -1263,11 +1289,11 @@ function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onF
       const r = await fetch("/api/skapa", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kod, barnId: barn.id, bilder, lage, anteckning, amne, niva }),
+        body: JSON.stringify({ kod, barnId: barn.id, bilder, filer, lage, anteckning, amne, niva }),
       });
       const data = await r.json().catch(() => ({}));
       if (r.status === 401) { alert("Familjekoden stämmer inte längre. Skriv in den igen."); return onFelKod(); }
-      if (r.status === 413) throw new Error("Bilderna är för stora. Prova med färre bilder.");
+      if (r.status === 413) throw new Error("Materialet är för stort. Prova med färre bilder eller en mindre fil.");
       if (r.status === 504) throw new Error("Det tog för lång tid. Prova med färre bilder eller försök igen.");
       if (!r.ok) throw new Error(data.fel || `Något gick fel (felkod ${r.status}).`);
       if (!data.fragor || data.fragor.length === 0) {
@@ -1319,9 +1345,20 @@ function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onF
             <input type="file" accept="image/*" multiple onChange={laggTill} style={{ display: "none" }} />
           </label>
         </div>
-        <p className="dov" style={{ textAlign: "center" }}>
-          {bilder.length === 0 ? "Fota direkt eller välj bilder du redan har, t.ex. skärmdumpar." : `${bilder.length} av högst 6 bilder`}
-        </p>
+        <label className="filknapp" style={{ borderColor: barn.farg }}>
+          <FilIkon /> {laser ? "Läser filen…" : "Välj fil (PDF, Word, PowerPoint)"}
+          <input type="file" accept={FIL_ACCEPT} multiple onChange={laggTillFil} style={{ display: "none" }} />
+        </label>
+        {(!harMaterial || bilder.length > 0) && <p className="dov" style={{ textAlign: "center" }}>
+          {!harMaterial ? "Fota direkt, välj bilder du redan har eller ladda upp en fil, t.ex. från Google Classroom." : bilder.length ? `${bilder.length} av högst 6 bilder` : ""}
+        </p>}
+        {filer.map((f, i) => (
+          <div key={i} className="filrad" style={{ background: barn.ljus }}>
+            <FilIkon />
+            <span className="filnamn">{f.namn}</span>
+            <button aria-label="Ta bort fil" onClick={() => setFiler(filer.filter((_, j) => j !== i))}>×</button>
+          </div>
+        ))}
         {bilder.length > 0 && (
           <div className="miniatyrer">
             {bilder.map((b, i) => (
@@ -1360,8 +1397,8 @@ function Fota({ barn, kod, amnen, startProv, onNyttAmne, onTillbaka, onKlar, onF
           <input className="falt" value={anteckning} onChange={(e) => setAnteckning(e.target.value)} placeholder={amne?.typ === "sprak" ? "t.ex. glosorna svenska till engelska" : amne?.typ === "matte" ? "t.ex. bråk med olika nämnare" : "t.ex. kapitel 3 om vikingatiden"} />
         </label>
         {fel && <p className="fel">{fel}</p>}
-        {bilder.length > 0 && !amne && <p className="dov" style={{ textAlign: "center" }}>Välj ett ämne först.</p>}
-        <button className="knapp" style={{ background: barn.farg, marginTop: "auto" }} disabled={bilder.length === 0 || !amne} onClick={skapa}>
+        {harMaterial && !amne && <p className="dov" style={{ textAlign: "center" }}>Välj ett ämne först.</p>}
+        <button className="knapp" style={{ background: barn.farg, marginTop: "auto" }} disabled={!harMaterial || laser || !amne} onClick={skapa}>
           Skapa min hjälplärare
         </button>
       </div>
@@ -1552,6 +1589,15 @@ function HogtalarIkon({ storlek = 18 }) {
     <svg width={storlek} height={storlek} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: "-3px", marginRight: 6 }}>
       <path d="M11 5 6 9H2v6h4l5 4z" />
       <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+    </svg>
+  );
+}
+
+function FilIkon({ storlek = 22 }) {
+  return (
+    <svg width={storlek} height={storlek} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5M9 13h6M9 17h6" />
     </svg>
   );
 }

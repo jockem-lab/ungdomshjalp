@@ -111,10 +111,10 @@ function systemPrompt(barn, lage, amne, np, niva) {
 Om ${barn.namn}: ${barn.larstil}
 
 Regler:
-- Du hjälper bara till med skolarbete.${np ? "" : " Utgå enbart från materialet eleven har fotat."}
+- Du hjälper bara till med skolarbete.${np ? "" : " Utgå enbart från materialet eleven har fotat eller laddat upp (bilder och/eller filer)."}
 - Skriv på svenska (utom när själva övningen är på ett annat språk, t.ex. glosor).
 - Anpassa språk och svårighet efter elevens ålder och beskrivningen ovan.
-- Innehållet ska vara lämpligt för barn. Om bilderna inte innehåller skolmaterial: skapa inga frågor, sätt titeln till "Hittade inget skolmaterial" och be vänligt eleven fota en sida ur boken.
+- Innehållet ska vara lämpligt för barn. Om materialet inte innehåller skolmaterial: skapa inga frågor, sätt titeln till "Hittade inget skolmaterial" och be vänligt eleven fota en sida ur boken.
 - Syftet är att eleven ska lära sig och träna, inte att få svaren serverade. Ledtrådar ska hjälpa eleven att tänka själv.
 - Frågor av typen "skriv" ska ha korta svar (ett ord, ett tal eller en kort fras) så att de kan rättas automatiskt.
 
@@ -178,19 +178,36 @@ export async function POST(req) {
   }
   const barn = hittaBarn(barnId);
   if (!barn) return Response.json({ fel: "Okänt barn." }, { status: 400 });
-  const bildLista = Array.isArray(bilder) ? bilder : [];
-  if (!np && (bildLista.length === 0 || bildLista.length > 6)) {
-    return Response.json({ fel: "Skicka mellan 1 och 6 bilder." }, { status: 400 });
+  const bildLista = Array.isArray(bilder) ? bilder.slice(0, 6) : [];
+  // Filer (PDF som base64, Word/PowerPoint som utplockad text) från t.ex. Google Classroom.
+  const filLista = (Array.isArray(body.filer) ? body.filer : [])
+    .filter((f) => f && (f.typ === "pdf" || f.typ === "text") && typeof f.data === "string")
+    .slice(0, 3);
+  if (!np && bildLista.length + filLista.length === 0) {
+    return Response.json({ fel: "Lägg till minst en bild eller fil." }, { status: 400 });
   }
 
-  const innehall = bildLista.slice(0, 6).map((dataUrl) => ({
+  const filBlock = filLista.map((f) =>
+    f.typ === "pdf"
+      ? {
+          type: "document",
+          title: String(f.namn || "Fil").slice(0, 100),
+          source: { type: "base64", media_type: "application/pdf", data: f.data.replace(/^data:[^;]+;base64,/, "") },
+        }
+      : {
+          type: "document",
+          title: String(f.namn || "Fil").slice(0, 100),
+          source: { type: "text", media_type: "text/plain", data: f.data.slice(0, 60000) },
+        }
+  );
+  const innehall = [...filBlock, ...bildLista.map((dataUrl) => ({
     type: "image",
     source: {
       type: "base64",
       media_type: "image/jpeg",
       data: String(dataUrl).replace(/^data:image\/\w+;base64,/, ""),
     },
-  }));
+  }))];
   innehall.push({
     type: "text",
     text:

@@ -174,3 +174,9 @@ body[data-tema="capy"] .fotoyta { border-radius: 28px; }
 .hangul { font-size: 40px; font-weight: 800; line-height: 1.2; }
 .hangul-liten { font-weight: 800; font-size: 1.1em; }
 .pepp { margin-top: 6px; align-self: flex-start; background: rgba(255,255,255,0.7); border: 0; border-radius: 999px; padding: 6px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+
+/* Uppladdade filer (PDF, Word, PowerPoint) */
+.filknapp { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 14px; border: 2px dashed; border-radius: 16px; background: #fff; font-weight: 800; cursor: pointer; }
+.filrad { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; font-weight: 700; }
+.filrad .filnamn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filrad button { width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(0,0,0,0.6); color: #fff; font-weight: 800; flex: 0 0 auto; }
