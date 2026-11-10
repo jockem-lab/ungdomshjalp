@@ -7,6 +7,7 @@ import { kodStammer } from "../../../lib/kod";
 import { tvattaAmne, sprakNamn } from "../../../lib/amnen";
 import { arDemo, demoForhor } from "../../../lib/demo";
 import { giltigtNp } from "../../../lib/np";
+import { tvattaNiva, nivaInstruktion } from "../../../lib/niva";
 
 export const maxDuration = 60; // sekunder, så Vercel hinner vänta på svaret
 
@@ -62,8 +63,9 @@ const FORHOR_SCHEMA = {
             description: "Ord eller fras på det främmande språket som ska kunna spelas upp. Annars tom sträng.",
           },
           lasupp_sprak: { type: "string", description: "Språkkod för lasupp, t.ex. en-GB. Annars tom sträng." },
+          niva: { type: "string", enum: ["E", "C", "A"], description: "Vilket betygssteg frågan motsvarar" },
         },
-        required: ["typ", "fraga", "alternativ", "ratt", "godkanda", "ledtrad", "forklaring", "lasupp", "lasupp_sprak"],
+        required: ["typ", "fraga", "alternativ", "ratt", "godkanda", "ledtrad", "forklaring", "lasupp", "lasupp_sprak", "niva"],
       },
     },
   },
@@ -103,8 +105,8 @@ function npInstruktion(np) {
   return `${bas} Utgå från det centrala innehållet i ${np.amne} för åk 7–9. Frågorna ska pröva begrepp, samband och förmåga att resonera, inte bara faktakunskap. Får gärna ha en kort källtext eller ett scenario i "lastext" ("sv-SE") som några frågor bygger på. "nyckelpunkter" = 4–6 centrala begrepp eller samband att kunna.`;
 }
 
-function systemPrompt(barn, lage, amne, np) {
-  return `Du är en vänlig och pedagogisk hjälplärare för ${barn.namn}, ${barn.alder} år, i den svenska skolan.
+function systemPrompt(barn, lage, amne, np, niva) {
+  return `Du är en vänlig och pedagogisk hjälplärare för ${barn.namn}, ${barn.alder} år, som går i årskurs ${barn.arskurs} i den svenska skolan.
 
 Om ${barn.namn}: ${barn.larstil}
 
@@ -117,6 +119,8 @@ Regler:
 - Frågor av typen "skriv" ska ha korta svar (ett ord, ett tal eller en kort fras) så att de kan rättas automatiskt.
 
 ${np ? npInstruktion(np) : amnesInstruktion(amne)}
+
+${nivaInstruktion(niva, barn.arskurs)}
 
 ${np ? "" : "Läge: "}${
     np ? ""
@@ -199,7 +203,7 @@ export async function POST(req) {
     const svar = await client.messages.create({
       model: MODELL,
       max_tokens: 8000,
-      system: systemPrompt(barn, lage, amne, np),
+      system: systemPrompt(barn, lage, amne, np, tvattaNiva(body.niva)),
       output_config: { format: { type: "json_schema", schema: FORHOR_SCHEMA } },
       messages: [{ role: "user", content: innehall }],
     });

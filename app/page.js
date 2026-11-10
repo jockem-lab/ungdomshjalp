@@ -8,6 +8,7 @@ import { BARN, hittaBarn } from "../lib/barn";
 import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
 import { arDemo } from "../lib/demo";
 import { npForBarn } from "../lib/np";
+import { NIVAER, nivaNamn } from "../lib/niva";
 
 function lasLagrat(nyckel, standard) {
   try {
@@ -94,7 +95,7 @@ export default function App() {
   if (kod && demo) {
     return (
       <>
-        <div className="testband">Testläge: påhittade förhör, inga krediter används</div>
+        <div className="testband">Testläge: fasta exempelfrågor, inga krediter används</div>
         {innehall()}
       </>
     );
@@ -293,7 +294,7 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp 
         {material.length === 0 && <p className="dov">Här hamnar allt du fotar. Börja med knappen ovanför.</p>}
         {visade.map((m) => (
           <div className="kort" key={m.id}>
-            <span className="amne" style={{ color: barn.farg }}>{amnesEtikett(m)} · {m.lage === "prov" ? "Provträning" : "Läxförhör"}</span>
+            <span className="amne" style={{ color: barn.farg }}>{amnesEtikett(m)} · {m.lage === "prov" ? "Provträning" : "Läxförhör"}{m.niva && m.niva !== "blandat" ? ` · ${nivaNamn(m.niva, barn.arskurs)}` : ""}</span>
             <span style={{ fontSize: 18, fontWeight: 800 }}>{m.titel}</span>
             <span className="dov">
               {m.fragor.length} frågor
@@ -400,9 +401,27 @@ function Laddar({ barn, text }) {
   );
 }
 
+function NivaVal({ barn, niva, setNiva }) {
+  const vald = NIVAER.find((n) => n.id === niva);
+  return (
+    <>
+      <span style={{ fontWeight: 800, fontSize: 15 }}>Hur svårt?</span>
+      <div className="chips">
+        {NIVAER.map((n) => (
+          <Chip key={n.id} aktiv={niva === n.id} farg={barn.farg} onClick={() => setNiva(n.id)}>
+            {barn.arskurs < 6 ? n.ung : n.namn}
+          </Chip>
+        ))}
+      </div>
+      {vald && <p className="dov">{vald.info}</p>}
+    </>
+  );
+}
+
 function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
   const np = npForBarn(barn.arskurs);
   const [amne, setAmne] = useState(null);
+  const [niva, setNiva] = useState("blandat");
   const [vantar, setVantar] = useState(false);
   const [fel, setFel] = useState("");
 
@@ -410,12 +429,13 @@ function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
     setVantar(true);
     setFel("");
     try {
-      const data = await hamtaForhor({ kod, barnId: barn.id, np: { ak: np.ak, amne } }, onFelKod);
+      const data = await hamtaForhor({ kod, barnId: barn.id, np: { ak: np.ak, amne }, niva }, onFelKod);
       if (!data) return;
       onKlar({
         ...data,
         id: Date.now().toString(36),
         lage: "prov",
+        niva,
         amneNamn: `Nationellt prov · ${amne}`,
         amneTyp: amne === "Engelska" ? "sprak" : "annat",
         sprak: amne === "Engelska" ? "en-GB" : "",
@@ -446,6 +466,7 @@ function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
             <Chip key={a} aktiv={amne === a} farg={barn.farg} onClick={() => setAmne(a)}>{a}</Chip>
           ))}
         </div>
+        <NivaVal barn={barn} niva={niva} setNiva={setNiva} />
         <p className="dov">Proven är egna övningsuppgifter i samma stil som de riktiga, inte de riktiga proven. Svenska och engelska börjar med en text att läsa (eller lyssna på).</p>
         {fel && <p className="fel">{fel}</p>}
         <button className="knapp" style={{ background: barn.farg, marginTop: "auto" }} disabled={!amne} onClick={starta}>
@@ -490,6 +511,7 @@ function Fota({ barn, kod, amnen, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
   const [vantar, setVantar] = useState(false);
   const [fel, setFel] = useState("");
   const [amneId, setAmneId] = useState(null);
+  const [niva, setNiva] = useState("blandat");
   const [nyttAmne, setNyttAmne] = useState(false);
   const amne = amnen.find((a) => a.id === amneId);
 
@@ -507,7 +529,7 @@ function Fota({ barn, kod, amnen, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
       const r = await fetch("/api/skapa", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kod, barnId: barn.id, bilder, lage, anteckning, amne }),
+        body: JSON.stringify({ kod, barnId: barn.id, bilder, lage, anteckning, amne, niva }),
       });
       const data = await r.json().catch(() => ({}));
       if (r.status === 401) { alert("Familjekoden stämmer inte längre. Skriv in den igen."); return onFelKod(); }
@@ -521,6 +543,7 @@ function Fota({ barn, kod, amnen, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
         ...data,
         id: Date.now().toString(36),
         lage,
+        niva,
         amneId: amne.id,
         amneNamn: amne.namn,
         amneTyp: amne.typ,
@@ -597,6 +620,7 @@ function Fota({ barn, kod, amnen, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
             Provträning
           </button>
         </div>
+        <NivaVal barn={barn} niva={niva} setNiva={setNiva} />
         <label className="etikett">
           Vad vill du träna på? (valfritt)
           <input className="falt" value={anteckning} onChange={(e) => setAnteckning(e.target.value)} placeholder={amne?.typ === "sprak" ? "t.ex. glosorna svenska till engelska" : amne?.typ === "matte" ? "t.ex. bråk med olika nämnare" : "t.ex. kapitel 3 om vikingatiden"} />
@@ -716,7 +740,10 @@ function Forhor({ barn, forhor, onKlar, onAvbryt }) {
           </details>
         )}
         <div className="kort">
-          <span className="amne" style={{ color: barn.farg }}>{forhor.amneNamn || forhor.amne}</span>
+          <span className="amne" style={{ color: barn.farg }}>
+            {forhor.amneNamn || forhor.amne}
+            {f.niva ? <span className="nivatagg">{nivaNamn(f.niva, barn.arskurs)}</span> : null}
+          </span>
           <p className="fraga">{f.fraga}</p>
           <div className="rad" style={{ flexWrap: "wrap" }}>
             <button className="liten-knapp" style={{ background: barn.ljus, flex: "0 0 auto", padding: "8px 14px" }} onClick={() => lasUpp(f.fraga)}>
