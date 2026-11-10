@@ -43,6 +43,24 @@ function krympBild(fil, maxSida = 1280) {
   });
 }
 
+// Gör en liten bild (för spelarkort och klubbmärke) som sparas i webbläsaren.
+function litenBild(fil, maxSida = 260, format = "image/jpeg") {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const skala = Math.min(1, maxSida / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * skala);
+      c.height = Math.round(img.height * skala);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL(format, 0.82));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(fil);
+  });
+}
+
 function lasUpp(text, sprak = "sv-SE") {
   try {
     window.speechSynthesis.cancel();
@@ -112,6 +130,7 @@ export default function App() {
   const [aktivt, setAktivt] = useState(null); // förhöret som körs
   const [amnen, setAmnen] = useState(STANDARD_AMNEN);
   const [belo, setBelo] = useState(tomBelo());
+  const [bilder, setBilder] = useState({ logo: "", spelare: {} }); // egna bilder, bara på den här enheten
   const demo = arDemo(kod);
   const prefix = demo ? "demo-" : ""; // testläget sparar separat från barnens riktiga förhör
 
@@ -125,6 +144,7 @@ export default function App() {
       setMaterial(lasLagrat(`${prefix}material-${barnId}`, []));
       setAmnen(lasLagrat(`${prefix}amnen-${barnId}`, STANDARD_AMNEN));
       setBelo(lasLagrat(`${prefix}belo-${barnId}`, tomBelo()));
+      setBilder(lasLagrat(`bilder-${barnId}`, { logo: "", spelare: {} }));
     }
   }, [barnId, prefix]);
 
@@ -135,6 +155,15 @@ export default function App() {
     setBelo(ny);
     sparaLagrat(`${prefix}belo-${barnId}`, ny);
     return vinst;
+  }
+
+  function uppdateraBilder(ny) {
+    setBilder(ny);
+    try {
+      localStorage.setItem(`bilder-${barnId}`, JSON.stringify(ny));
+    } catch {
+      alert("Mobilen har inte plats för fler bilder. Ta bort några först.");
+    }
   }
 
   function uppdateraAmnen(lista) {
@@ -195,6 +224,7 @@ export default function App() {
       <Forhor
         barn={barn}
         forhor={aktivt}
+        bilder={bilder}
         onBelona={geBelöning}
         onKlar={(resultat) => {
           const lista = material.map((m) =>
@@ -209,11 +239,11 @@ export default function App() {
   }
 
   if (skarm === "kort" && aktivt) {
-    return <Bladdrakort barn={barn} forhor={aktivt} onBelona={geBelöning} onKlar={() => setSkarm("hem")} />;
+    return <Bladdrakort barn={barn} forhor={aktivt} bilder={bilder} onBelona={geBelöning} onKlar={() => setSkarm("hem")} />;
   }
 
   if (skarm === "belo") {
-    return <Beloningar barn={barn} belo={belo} onTillbaka={() => setSkarm("hem")} />;
+    return <Beloningar barn={barn} belo={belo} bilder={bilder} onBilder={uppdateraBilder} onTillbaka={() => setSkarm("hem")} />;
   }
 
   if (skarm === "np") {
@@ -251,6 +281,7 @@ export default function App() {
       onAmnen={() => setSkarm("amnen")}
       onNp={() => setSkarm("np")}
       belo={belo}
+      bilder={bilder}
       onBelo={() => setSkarm("belo")}
       onKort={(m) => { setAktivt(m); setSkarm("kort"); }}
       onByt={() => setSkarm("valj")}
@@ -324,7 +355,7 @@ function amnesEtikett(m) {
   return m.amneNamn || m.amne || "Övrigt";
 }
 
-function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp, belo, onBelo, onKort }) {
+function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp, belo, bilder, onBelo, onKort }) {
   const np = npForBarn(barn.arskurs);
   const [filter, setFilter] = useState(null);
   const amnesNamn = [...new Set(material.map(amnesEtikett))];
@@ -334,7 +365,7 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
     <main className="app">
       <div className={`topp ${barn.tema === "lfc" ? "lfc" : ""}`} style={barn.tema === "lfc" ? undefined : { background: barn.farg }}>
         <button className="pill" onClick={onByt}>Byt person</button>
-        {barn.tema === "lfc" && <FotbollIkon />}
+        {barn.tema === "lfc" && (bilder?.logo ? <img className="klubblogo" src={bilder.logo} alt="Klubbmärke" /> : <FotbollIkon />)}
         <h1>{barn.tema === "lfc" ? `Kom igen, ${barn.namn}!` : `Hej ${barn.namn}!`}</h1>
         <p style={{ opacity: 0.95 }}>Fota en sida ur boken eller dina glosor, så gör din hjälplärare ett förhör.</p>
         <button className="pill" onClick={onBelo}>{beloKort(barn, belo)}</button>
@@ -558,7 +589,7 @@ function beloKort(barn, belo) {
   return `${d} ${d === 1 ? "dag" : "dagar"} i rad`;
 }
 
-function Vinst({ barn, vinst }) {
+function Vinst({ barn, vinst, bilder }) {
   if (!vinst) return null;
   if (vinst.typ === "dagar") {
     return (
@@ -573,7 +604,7 @@ function Vinst({ barn, vinst }) {
       <div className="vinst" style={{ background: barn.ljus }}>
         <span style={{ fontWeight: 800 }}>{vinst.nya.length > 1 ? "Två nya spelarkort!" : "Nytt spelarkort!"}</span>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-          {vinst.nya.map((sp, i) => <SpelarKort key={i} spelare={sp} />)}
+          {vinst.nya.map((sp, i) => <SpelarKort key={i} spelare={sp} bild={bilder?.spelare?.[sp[0]]} />)}
         </div>
         <span className="dov">Du har {Math.min(vinst.totalt, SPELARE.length)} av {SPELARE.length} spelare.</span>
       </div>
@@ -595,20 +626,55 @@ function Vinst({ barn, vinst }) {
   );
 }
 
-function Beloningar({ barn, belo, onTillbaka }) {
+function Beloningar({ barn, belo, bilder, onBilder, onTillbaka }) {
+  const [andra, setAndra] = useState(false);
   if (barn.belo === "fotboll") {
     const antal = belo.samling || 0;
+    async function valjBild(e, namn) {
+      const fil = e.target.files?.[0];
+      e.target.value = "";
+      if (!fil) return;
+      const bild = await litenBild(fil, 260);
+      onBilder({ ...bilder, spelare: { ...(bilder.spelare || {}), [namn]: bild } });
+    }
+    async function valjLogo(e) {
+      const fil = e.target.files?.[0];
+      e.target.value = "";
+      if (!fil) return;
+      onBilder({ ...bilder, logo: await litenBild(fil, 200, "image/png") });
+    }
     return (
       <main className="app">
         <div className="topp lfc">
           <button className="pill" onClick={onTillbaka}>Tillbaka</button>
+          {bilder?.logo && <img className="klubblogo" src={bilder.logo} alt="Klubbmärke" />}
           <h1>Mitt lag</h1>
           <p style={{ opacity: 0.95 }}>{Math.min(antal, SPELARE.length)} av {SPELARE.length} Liverpool-spelare. Ett nytt kort för varje förhör, två om du har minst 80 % rätt.</p>
         </div>
         <div className="sida">
-          <p className="dov">Du har gjort {belo.forhor || 0} förhör och tränat {(belo.dagar || []).length} olika dagar.</p>
+          <button className="knapp ram" onClick={() => setAndra(!andra)}>{andra ? "Klar med bilderna" : "Lägg till bilder"}</button>
+          {andra && (
+            <div className="kort">
+              <p>Välj klubbmärke och spelarbilder från mobilens bilder. De sparas bara på den här mobilen och laddas aldrig upp någonstans.</p>
+              <label className="knapp" style={{ background: "#C8102E" }}>
+                {bilder?.logo ? "Byt klubbmärke" : "Välj klubbmärke"}
+                <input type="file" accept="image/*" onChange={valjLogo} style={{ display: "none" }} />
+              </label>
+              <p className="dov">Tryck på ett kort nedan för att välja bild till den spelaren.</p>
+            </div>
+          )}
+          {!andra && <p className="dov">Du har gjort {belo.forhor || 0} förhör och tränat {(belo.dagar || []).length} olika dagar.</p>}
           <div className="spelargrid">
-            {SPELARE.map((sp, i) => <SpelarKort key={i} spelare={sp} last={i >= antal} />)}
+            {SPELARE.map((sp, i) =>
+              andra ? (
+                <label key={i} style={{ cursor: "pointer" }}>
+                  <SpelarKort spelare={sp} bild={bilder?.spelare?.[sp[0]]} />
+                  <input type="file" accept="image/*" onChange={(e) => valjBild(e, sp[0])} style={{ display: "none" }} />
+                </label>
+              ) : (
+                <SpelarKort key={i} spelare={sp} last={i >= antal} bild={bilder?.spelare?.[sp[0]]} />
+              )
+            )}
           </div>
         </div>
       </main>
@@ -662,8 +728,8 @@ function Beloningar({ barn, belo, onTillbaka }) {
   );
 }
 
-// Ett eget spelarkort (inga foton eller klubbmärken), i röd Liverpool-stil.
-function SpelarKort({ spelare, last = false }) {
+// Spelarkort i röd/vit Liverpool-stil. Bilden är en som familjen själv valt på mobilen.
+function SpelarKort({ spelare, last = false, bild = "" }) {
   const [namn, position, nummer, epok] = spelare;
   if (last) {
     return (
@@ -675,10 +741,13 @@ function SpelarKort({ spelare, last = false }) {
   }
   return (
     <div className="spelarkort">
+      {bild ? <img className="spelarbild" src={bild} alt={namn} /> : (
       <svg viewBox="0 0 64 56" width="58" height="50" aria-hidden="true">
         <path d="M20 4 L8 10 L2 24 L12 28 L14 22 L14 54 L50 54 L50 22 L52 28 L62 24 L56 10 L44 4 Q32 12 20 4 Z" fill="#fff" opacity="0.95" />
         <text x="32" y="44" textAnchor="middle" fontSize="20" fontWeight="800" fill="#C8102E">{nummer || "★"}</text>
       </svg>
+      )}
+      {bild && nummer ? <span className="spnummer">{nummer}</span> : null}
       <span className="spnamn">{namn}</span>
       <span className="spinfo">{position}</span>
       <span className="spinfo">{epok}</span>
@@ -713,7 +782,7 @@ function gorKort(forhor) {
   });
 }
 
-function Bladdrakort({ barn, forhor, onBelona, onKlar }) {
+function Bladdrakort({ barn, forhor, bilder, onBelona, onKlar }) {
   const [hog, setHog] = useState(() => gorKort(forhor));
   const [vand, setVand] = useState(false);
   const [kunde, setKunde] = useState(0);
@@ -759,7 +828,7 @@ function Bladdrakort({ barn, forhor, onBelona, onKlar }) {
         <div className="sida" style={{ justifyContent: "center", textAlign: "center" }}>
           <h1>Alla kort klara!</h1>
           <p style={{ fontSize: 20, fontWeight: 800, color: barn.farg }}>Du kunde {kunde} av {totalt} direkt</p>
-          <Vinst barn={barn} vinst={vinst} />
+          <Vinst barn={barn} vinst={vinst} bilder={bilder} />
           <button className="knapp" style={{ background: barn.farg }} onClick={onKlar}>Klar</button>
         </div>
       </main>
@@ -964,7 +1033,7 @@ function Fota({ barn, kod, amnen, onNyttAmne, onTillbaka, onKlar, onFelKod }) {
   );
 }
 
-function Forhor({ barn, forhor, onKlar, onAvbryt, onBelona }) {
+function Forhor({ barn, forhor, bilder, onKlar, onAvbryt, onBelona }) {
   const [vinst, setVinst] = useState(null);
   const [lyssnar, setLyssnar] = useState(false);
   const [talFel, setTalFel] = useState("");
@@ -1026,7 +1095,7 @@ function Forhor({ barn, forhor, onKlar, onAvbryt, onBelona }) {
           <h1>{andel >= 0.8 ? "Superbra jobbat!" : andel >= 0.5 ? "Bra kämpat!" : "Bra att du tränar!"}</h1>
           <p style={{ fontSize: 22, fontWeight: 800, color: barn.farg }}>{antalRatt} av {fragor.length} rätt</p>
           <p className="dov">{andel >= 0.8 ? "Du kan det här. Kör igen innan provet så sitter det." : "Kör en gång till, det blir lättare för varje gång."}</p>
-          <Vinst barn={barn} vinst={vinst} />
+          <Vinst barn={barn} vinst={vinst} bilder={bilder} />
           <button className="knapp" style={{ background: barn.farg }} onClick={() => onKlar({ ratt: antalRatt, antal: fragor.length })}>Klar</button>
         </div>
       </main>
