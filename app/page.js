@@ -9,7 +9,7 @@ import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
 import { arDemo } from "../lib/demo";
 import { npForBarn } from "../lib/np";
 import { NIVAER, nivaNamn } from "../lib/niva";
-import { DJUR, KLISTER, SPELARE, MARKEN, tomBelo, dagarIRad, belona } from "../lib/belo";
+import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, tomBelo, dagarIRad, belona } from "../lib/belo";
 
 function lasLagrat(nyckel, standard) {
   try {
@@ -59,6 +59,37 @@ function litenBild(fil, maxSida = 260, format = "image/jpeg") {
     img.onerror = reject;
     img.src = URL.createObjectURL(fil);
   });
+}
+
+// Hämtar spelarbilder och klubbmärke automatiskt från Wikipedia i barnets webbläsare.
+// Inget sparas i repot. Resultatet sparas i webbläsaren en vecka.
+async function hamtaWikiBilder() {
+  const cache = lasLagrat("wikibilder", null);
+  if (cache && Date.now() - cache.tid < 7 * 86400000) return cache.data;
+  const titlar = [KLUBB_WIKI, ...SPELARE.map(([namn]) => WIKI_TITEL[namn] || namn)];
+  const tillTitel = {}; // wikititel -> vårt namn
+  SPELARE.forEach(([namn]) => { tillTitel[WIKI_TITEL[namn] || namn] = namn; });
+  const data = { logo: "", spelare: {} };
+  for (let i = 0; i < titlar.length; i += 10) {
+    const grupp = titlar.slice(i, i + 10);
+    const url = "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&prop=pageimages&piprop=thumbnail&pithumbsize=320&pilicense=any&titles=" + encodeURIComponent(grupp.join("|"));
+    const r = await fetch(url);
+    if (!r.ok) continue;
+    const j = await r.json();
+    const omvand = {}; // slutlig titel -> efterfrågad titel
+    for (const t of grupp) omvand[t] = t;
+    for (const n of j.query?.normalized || []) omvand[n.to] = omvand[n.from] || n.from;
+    for (const n of j.query?.redirects || []) omvand[n.to] = omvand[n.from] || n.from;
+    for (const sida of Object.values(j.query?.pages || {})) {
+      const bild = sida.thumbnail?.source;
+      if (!bild) continue;
+      const fraga = omvand[sida.title] || sida.title;
+      if (fraga === KLUBB_WIKI) data.logo = bild;
+      else if (tillTitel[fraga]) data.spelare[tillTitel[fraga]] = bild;
+    }
+  }
+  sparaLagrat("wikibilder", { tid: Date.now(), data });
+  return data;
 }
 
 function lasUpp(text, sprak = "sv-SE") {
@@ -131,6 +162,7 @@ export default function App() {
   const [amnen, setAmnen] = useState(STANDARD_AMNEN);
   const [belo, setBelo] = useState(tomBelo());
   const [bilder, setBilder] = useState({ logo: "", spelare: {} }); // egna bilder, bara på den här enheten
+  const [wiki, setWiki] = useState({ logo: "", spelare: {} });
   const demo = arDemo(kod);
   const prefix = demo ? "demo-" : ""; // testläget sparar separat från barnens riktiga förhör
 
@@ -156,6 +188,17 @@ export default function App() {
     sparaLagrat(`${prefix}belo-${barnId}`, ny);
     return vinst;
   }
+
+  useEffect(() => {
+    const b = barnId ? hittaBarn(barnId) : null;
+    if (b?.belo === "fotboll") hamtaWikiBilder().then(setWiki).catch(() => {});
+  }, [barnId]);
+
+  // Egna bilder går före Wikipedias.
+  const allaBilder = {
+    logo: bilder.logo || wiki.logo,
+    spelare: { ...wiki.spelare, ...(bilder.spelare || {}) },
+  };
 
   function uppdateraBilder(ny) {
     setBilder(ny);
@@ -224,7 +267,7 @@ export default function App() {
       <Forhor
         barn={barn}
         forhor={aktivt}
-        bilder={bilder}
+        bilder={allaBilder}
         onBelona={geBelöning}
         onKlar={(resultat) => {
           const lista = material.map((m) =>
@@ -239,11 +282,11 @@ export default function App() {
   }
 
   if (skarm === "kort" && aktivt) {
-    return <Bladdrakort barn={barn} forhor={aktivt} bilder={bilder} onBelona={geBelöning} onKlar={() => setSkarm("hem")} />;
+    return <Bladdrakort barn={barn} forhor={aktivt} bilder={allaBilder} onBelona={geBelöning} onKlar={() => setSkarm("hem")} />;
   }
 
   if (skarm === "belo") {
-    return <Beloningar barn={barn} belo={belo} bilder={bilder} onBilder={uppdateraBilder} onTillbaka={() => setSkarm("hem")} />;
+    return <Beloningar barn={barn} belo={belo} bilder={allaBilder} egna={bilder} onBilder={uppdateraBilder} onTillbaka={() => setSkarm("hem")} />;
   }
 
   if (skarm === "np") {
@@ -281,7 +324,7 @@ export default function App() {
       onAmnen={() => setSkarm("amnen")}
       onNp={() => setSkarm("np")}
       belo={belo}
-      bilder={bilder}
+      bilder={allaBilder}
       onBelo={() => setSkarm("belo")}
       onKort={(m) => { setAktivt(m); setSkarm("kort"); }}
       onByt={() => setSkarm("valj")}
@@ -626,7 +669,7 @@ function Vinst({ barn, vinst, bilder }) {
   );
 }
 
-function Beloningar({ barn, belo, bilder, onBilder, onTillbaka }) {
+function Beloningar({ barn, belo, bilder, egna, onBilder, onTillbaka }) {
   const [andra, setAndra] = useState(false);
   if (barn.belo === "fotboll") {
     const antal = belo.samling || 0;
@@ -635,13 +678,13 @@ function Beloningar({ barn, belo, bilder, onBilder, onTillbaka }) {
       e.target.value = "";
       if (!fil) return;
       const bild = await litenBild(fil, 260);
-      onBilder({ ...bilder, spelare: { ...(bilder.spelare || {}), [namn]: bild } });
+      onBilder({ ...egna, spelare: { ...(egna.spelare || {}), [namn]: bild } });
     }
     async function valjLogo(e) {
       const fil = e.target.files?.[0];
       e.target.value = "";
       if (!fil) return;
-      onBilder({ ...bilder, logo: await litenBild(fil, 200, "image/png") });
+      onBilder({ ...egna, logo: await litenBild(fil, 200, "image/png") });
     }
     return (
       <main className="app">
@@ -652,10 +695,10 @@ function Beloningar({ barn, belo, bilder, onBilder, onTillbaka }) {
           <p style={{ opacity: 0.95 }}>{Math.min(antal, SPELARE.length)} av {SPELARE.length} Liverpool-spelare. Ett nytt kort för varje förhör, två om du har minst 80 % rätt.</p>
         </div>
         <div className="sida">
-          <button className="knapp ram" onClick={() => setAndra(!andra)}>{andra ? "Klar med bilderna" : "Lägg till bilder"}</button>
+          <button className="tabort" style={{ alignSelf: "flex-end" }} onClick={() => setAndra(!andra)}>{andra ? "Klar med bilderna" : "Byt bilder själv"}</button>
           {andra && (
             <div className="kort">
-              <p>Välj klubbmärke och spelarbilder från mobilens bilder. De sparas bara på den här mobilen och laddas aldrig upp någonstans.</p>
+              <p>Bilderna hämtas automatiskt från Wikipedia. Vill du byta någon kan du välja en egen från mobilens bilder. Den sparas bara på den här mobilen.</p>
               <label className="knapp" style={{ background: "#C8102E" }}>
                 {bilder?.logo ? "Byt klubbmärke" : "Välj klubbmärke"}
                 <input type="file" accept="image/*" onChange={valjLogo} style={{ display: "none" }} />
@@ -676,6 +719,7 @@ function Beloningar({ barn, belo, bilder, onBilder, onTillbaka }) {
               )
             )}
           </div>
+          <p className="dov" style={{ fontSize: 12 }}>Bilder från Wikipedia och Wikimedia Commons.</p>
         </div>
       </main>
     );
