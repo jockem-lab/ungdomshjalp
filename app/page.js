@@ -524,12 +524,12 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
         <h1>{halsning(barn)}</h1>
         {barn.koreanska && <p className="koreansk-rad">안녕 = annyeong = hej på koreanska</p>}
         {barn.tema === "pop" && <Armband text={barn.namn} />}
-        <p style={{ opacity: 0.95 }}>Fota en sida ur boken eller dina glosor, så gör din hjälplärare ett förhör.</p>
+        <p style={{ opacity: 0.95 }}>Fota boken eller ladda upp en fil, så gör din hjälplärare ett förhör.</p>
         <button className="pill" onClick={onBelo}>{beloKort(barn, belo)}</button>
       </div>
       <div className="sida">
         <button className="knapp" onClick={onFota}>
-          <KameraIkon /> Fota nytt material
+          <KameraIkon /> Ny läxa eller prov
         </button>
         {np && (
           <button className="knapp ram" onClick={onNp} style={{ flexDirection: "column", gap: 2, borderColor: barn.farg }}>
