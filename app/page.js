@@ -249,6 +249,7 @@ export default function App() {
   const [wiki, setWiki] = useState({ logo: "", spelare: {} });
   const [prov, setProv] = useState([]); // barnets provschema
   const [startProv, setStartProv] = useState(null); // prov som barnet vill träna inför
+  const [topp, setTopp] = useState(null); // veckans topplista och vunna stickers
   const pass = useRef(null); // pågående träningspass, för föräldravyn
   const demo = arDemo(kod);
   const prefix = demo ? "demo-" : ""; // testläget sparar separat från barnens riktiga förhör
@@ -312,6 +313,19 @@ export default function App() {
       pass.current = null;
     };
   }, [skarm, aktivt?.id, barnId, kod]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hämtar topplistan när man kommer till start- eller valsidan (lite fördröjt så att nyss avslutade pass hinner sparas).
+  useEffect(() => {
+    if (!kod || !["valj", "hem", "topplista"].includes(skarm)) return;
+    let avbruten = false;
+    const t = setTimeout(() => {
+      fetch("/api/topplista", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kod }) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (!avbruten && d && d.databas) setTopp(d); })
+        .catch(() => {});
+    }, skarm === "hem" ? 1200 : 0);
+    return () => { avbruten = true; clearTimeout(t); };
+  }, [kod, skarm]);
 
   function framsteg(f) {
     if (pass.current) pass.current.framsteg = f;
@@ -379,6 +393,7 @@ export default function App() {
   if (!barn || skarm === "valj") {
     return (
       <Valj
+        topp={topp}
         onAdmin={() => setSkarm("admin")}
         onVal={(id) => { setBarnId(id); setSkarm("hem"); }}
         onLoggaUt={() => { sparaLagrat("familjekod", null); setKod(null); }}
@@ -434,6 +449,19 @@ export default function App() {
     return <Bladdrakort barn={barn} forhor={aktivt} bilder={allaBilder} onBelona={geBelöning} onFramsteg={framsteg} onKlar={() => setSkarm("hem")} />;
   }
 
+  if (skarm === "topplista") {
+    return (
+      <main className="app">
+        <div className="sida">
+          <button className="pill" onClick={() => setSkarm("hem")}>Tillbaka</button>
+          {topp ? <Topplista topp={topp} barnId={barn.id} /> : <p className="dov">Hämtar topplistan…</p>}
+          <SaFarDuPoang />
+          {topp && <MinaStickers barn={barn} stickers={topp.stickers?.[barn.id] || []} />}
+        </div>
+      </main>
+    );
+  }
+
   if (skarm === "belo") {
     return <Beloningar barn={barn} belo={belo} bilder={allaBilder} egna={bilder} onBilder={uppdateraBilder} onTillbaka={() => setSkarm("hem")} />;
   }
@@ -475,6 +503,8 @@ export default function App() {
       belo={belo}
       bilder={allaBilder}
       onBelo={() => setSkarm("belo")}
+      topp={topp}
+      onTopplista={() => setSkarm("topplista")}
       onKort={(m) => { setAktivt(m); setSkarm("kort"); }}
       onByt={() => setSkarm("valj")}
       onFota={() => { setStartProv(null); setSkarm("fota"); }}
@@ -525,7 +555,7 @@ function Login({ onKlar }) {
   );
 }
 
-function Valj({ onVal, onLoggaUt, onAdmin }) {
+function Valj({ onVal, onLoggaUt, onAdmin, topp }) {
   return (
     <main className="app bred">
       <div className="sida">
@@ -542,12 +572,141 @@ function Valj({ onVal, onLoggaUt, onAdmin }) {
           </button>
         ))}
         </div>
+        {topp && (
+          <div className="kort" style={{ gap: 14 }}>
+            <Topplista topp={topp} />
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <button className="pill" onClick={onAdmin}>Föräldravy</button>
           <button className="tabort" style={{ alignSelf: "auto" }} onClick={onLoggaUt}>Logga ut den här enheten</button>
         </div>
       </div>
     </main>
+  );
+}
+
+// ---------- Topplista och hemliga stickers ----------
+
+function Topplista({ topp, barnId }) {
+  const max = Math.max(1, ...topp.lista.map((r) => r.poang));
+  const forraVinnare = topp.forra?.vinnare || [];
+  const namn = (id) => BARN.find((b) => b.id === id)?.namn || id;
+  return (
+    <div className="topplista">
+      <div className="topp-rubrik">
+        <span>
+          <strong style={{ fontSize: 19 }}>Veckans topplista</strong>
+          <span className="dov" style={{ display: "block" }}>Vecka {topp.vecka} · {topp.dagarKvar <= 0 ? "Sista dagen idag!" : `${topp.dagarKvar} ${topp.dagarKvar === 1 ? "dag" : "dagar"} kvar`}</span>
+        </span>
+        <span className="hemlig" title="Veckans hemliga sticker">?</span>
+      </div>
+      <p className="dov" style={{ marginTop: -4 }}>Den som har tränat mest när veckan är slut vinner veckans hemliga sticker.</p>
+      <ol className="topprader">
+        {topp.lista.map((r, i) => (
+          <li key={r.id} className={r.id === barnId ? "jag" : ""} style={r.id === barnId ? { borderColor: r.farg } : undefined}>
+            <span className="placering">{r.poang > 0 ? ["🥇", "🥈", "🥉"][i] || i + 1 : "–"}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <strong>{r.namn}</strong>
+                <strong>{r.poang} p</strong>
+              </span>
+              <span className="poangstapel"><span style={{ width: `${(r.poang / max) * 100}%`, background: r.farg }} /></span>
+              <span className="dov" style={{ fontSize: 13 }}>{r.minuter} min · {r.pass} pass · {r.dagar} {r.dagar === 1 ? "dag" : "dagar"}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      {forraVinnare.length > 0 && (
+        <p className="dov">
+          Vecka {topp.forra.vecka} vann {forraVinnare.map(namn).join(" och ")} {topp.forra.sticker.tecken} {topp.forra.sticker.namn}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SaFarDuPoang() {
+  return (
+    <div className="kort">
+      <strong>Så får du poäng</strong>
+      <ul className="punkter" style={{ fontSize: 15 }}>
+        <li>1 poäng för varje minut du tränar (upp till 45 minuter per dag).</li>
+        <li>5 poäng för varje förhör eller bläddrakortspass du gör klart (upp till 6 per dag).</li>
+        <li>10 extra poäng för varje dag du tränar. Lite varje dag lönar sig!</li>
+      </ul>
+      <p className="dov">Det spelar ingen roll hur många rätt du har, bara att du tränar. Veckan börjar på måndag.</p>
+    </div>
+  );
+}
+
+function ToppKort({ barn, topp, onClick }) {
+  const plats = topp.lista.findIndex((r) => r.id === barn.id);
+  const jag = topp.lista[plats];
+  const antal = (topp.stickers?.[barn.id] || []).length;
+  return (
+    <button className="knapp ram toppkort" onClick={onClick} style={{ borderColor: barn.farg }}>
+      <span className="hemlig liten">?</span>
+      <span style={{ flex: 1, textAlign: "left", display: "flex", flexDirection: "column", gap: 2 }}>
+        Veckans topplista
+        <span className="dov" style={{ fontWeight: 600 }}>
+          {jag && jag.poang > 0 ? `Plats ${plats + 1} med ${jag.poang} poäng` : "Träna för att komma med"}
+          {antal ? ` · ${antal} ${antal === 1 ? "hemlig sticker" : "hemliga stickers"}` : ""}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function MinaStickers({ barn, stickers }) {
+  return (
+    <div className="kort">
+      <strong>Mina hemliga stickers</strong>
+      {stickers.length === 0 ? (
+        <p className="dov">Inga än. Vinn en vecka så får du veckans hemliga sticker här!</p>
+      ) : (
+        <div className="stickerrad">
+          {stickers.map((s) => (
+            <span key={s.start} className="veckosticker" style={{ background: s.farg }}>
+              <span style={{ fontSize: 38 }} aria-hidden="true">{s.tecken}</span>
+              <span style={{ fontSize: 12, fontWeight: 800 }}>{s.namn}</span>
+              <span style={{ fontSize: 11 }}>Vecka {s.vecka}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Visar en överraskning första gången barnet kommer in efter att ha vunnit en vecka.
+function NyStickerVinst({ barn, stickers, forraVecka }) {
+  const nyckel = `sedda-stickers-${barn.id}`;
+  const [sedda, setSedda] = useState(() => lasLagrat(nyckel, null));
+  useEffect(() => {
+    // Första gången: räkna allt som redan vunnits som sett, utom förra veckans.
+    if (sedda === null) {
+      const start = stickers.filter((s) => s.vecka !== forraVecka).map((s) => s.start);
+      setSedda(start);
+      sparaLagrat(nyckel, start);
+    }
+  }, [sedda]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ny = sedda ? stickers.find((s) => !sedda.includes(s.start)) : null;
+  if (!ny) return null;
+  return (
+    <div className="kort stickervinst" style={{ borderColor: barn.farg }}>
+      <span className="dov" style={{ fontWeight: 800 }}>Du vann vecka {ny.vecka}!</span>
+      <span className="veckosticker stor" style={{ background: ny.farg }}>
+        <span style={{ fontSize: 64 }} aria-hidden="true">{ny.tecken}</span>
+      </span>
+      <strong style={{ fontSize: 20 }}>Den hemliga stickern var {ny.namn}</strong>
+      <p className="dov">Den finns nu på din profil.</p>
+      <button className="knapp" style={{ background: barn.farg }} onClick={() => {
+        const lista = [...sedda, ny.start];
+        setSedda(lista);
+        sparaLagrat(nyckel, lista);
+      }}>Häftigt!</button>
+    </div>
   );
 }
 
@@ -709,6 +868,24 @@ function Foraldravy({ demo, onTillbaka }) {
             </div>
           ))}
         </div>
+        {data.topplista && (
+          <div className="tva-kolumner">
+            <div className="kort"><Topplista topp={data.topplista} /></div>
+            <div className="kort">
+              <strong>Vunna hemliga stickers</strong>
+              {BARN.map((b) => {
+                const st = data.topplista.stickers?.[b.id] || [];
+                return (
+                  <span key={b.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, borderBottom: "1px dashed #E5E7EB", paddingBottom: 4 }}>
+                    <span>{b.namn}</span>
+                    <span>{st.length ? st.map((x) => x.tecken).join(" ") : <span className="dov">inga än</span>}</span>
+                  </span>
+                );
+              })}
+              <p className="dov">Veckans sticker är hemlig tills veckan är slut. Poängen bygger bara på hur mycket barnen tränar, inte på hur många rätt de har.</p>
+            </div>
+          </div>
+        )}
         <h2>Senaste passen</h2>
         <div className="chips">
           <Chip aktiv={!visaBarn} farg="#1F2937" onClick={() => setVisaBarn(null)}>Alla</Chip>
@@ -742,7 +919,7 @@ function amnesEtikett(m) {
   return m.amneNamn || m.amne || "Övrigt";
 }
 
-function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp, belo, bilder, onBelo, onKort, prov = [], onProvschema, onTranaProv }) {
+function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp, belo, bilder, onBelo, onKort, prov = [], onProvschema, onTranaProv, topp, onTopplista }) {
   const kommande = kommandeProv(prov).slice(0, 3);
   const np = npForBarn(barn.arskurs);
   const [filter, setFilter] = useState(null);
@@ -775,6 +952,8 @@ function Hem({ barn, material, onByt, onFota, onStarta, onTaBort, onAmnen, onNp,
             <span className="dov" style={{ fontWeight: 600 }}>{np.iforvag ? `Inför åk ${np.ak}` : `Åk ${np.ak}`}: {np.amnen.slice(0, 3).join(", ")}{np.amnen.length > 3 ? " m.fl." : ""}</span>
           </button>
         )}
+        {topp && <NyStickerVinst barn={barn} stickers={topp.stickers?.[barn.id] || []} forraVecka={topp.forra?.vecka} />}
+        {topp && <ToppKort barn={barn} topp={topp} onClick={onTopplista} />}
         {barn.koreanska && <DagensOrd barn={barn} />}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <h2>Mina prov</h2>
