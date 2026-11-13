@@ -11,7 +11,7 @@ import { npForBarn } from "../lib/np";
 import { NIVAER, nivaNamn } from "../lib/niva";
 import { lasFil, FIL_ACCEPT } from "../lib/filer";
 import { dagensUttryck, slumpa, PEPP_RATT, PEPP_FEL } from "../lib/koreanska";
-import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, tomBelo, dagarIRad, belona } from "../lib/belo";
+import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, KPOP, KPOP_GRUPPER, kpopGrupp, klaraGrupper, tomBelo, dagarIRad, belona } from "../lib/belo";
 
 function lasLagrat(nyckel, standard) {
   try {
@@ -1337,6 +1337,7 @@ function ForklaraIgen({ barn, kod, fraga, mittSvar }) {
 function beloKort(barn, belo) {
   if (barn.belo === "djur") return `Mina djur: ${belo.samling || 0}`;
   if (barn.belo === "klister") return `Mina klistermärken: ${belo.samling || 0}`;
+  if (barn.belo === "kpop") return `Mina K-pop-stickers: ${Math.min(belo.samling || 0, KPOP.length)} av ${KPOP.length}`;
   if (barn.belo === "fotboll") return `Mina spelarkort: ${Math.min(belo.samling || 0, SPELARE.length)} av ${SPELARE.length}`;
   const d = dagarIRad(belo.dagar || []);
   return `${d} ${d === 1 ? "dag" : "dagar"} i rad`;
@@ -1349,6 +1350,25 @@ function Vinst({ barn, vinst, bilder }) {
       <div className="vinst" style={{ background: barn.ljus }}>
         <strong style={{ fontSize: 28 }}>{vinst.dagar} {vinst.dagar === 1 ? "dag" : "dagar"} i rad</strong>
         {vinst.nyttMarke ? <span>Nytt märke: {vinst.nyttMarke} dagar i rad!</span> : <span>Träna imorgon också så växer kedjan.</span>}
+      </div>
+    );
+  }
+  if (vinst.typ === "kpop") {
+    return (
+      <div className="vinst" style={{ background: barn.ljus }}>
+        <span style={{ fontWeight: 800 }}>{vinst.nya.length > 1 ? "Två nya stickers!" : "Ny sticker!"}</span>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+          {vinst.nya.map((st, i) => <KpopSticker key={i} sticker={st} holo={st.holo} ny />)}
+        </div>
+        {vinst.nyaGrupper.map((g) => (
+          <div key={g} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <strong>Hela {kpopGrupp(g).namn} är klar! Du låste upp bonusstickern.</strong>
+            <GruppSticker grupp={kpopGrupp(g)} ny />
+          </div>
+        ))}
+        <span className="dov">
+          {vinst.totalt > KPOP.length ? `Albumet är fullt! Nu samlar du glittriga holo-stickers: ${Math.min(vinst.totalt - KPOP.length, KPOP.length)} av ${KPOP.length}.` : `Du har ${vinst.totalt} av ${KPOP.length} stickers.`}
+        </span>
       </div>
     );
   }
@@ -1435,6 +1455,7 @@ function Beloningar({ barn, belo, bilder, egna, onBilder, onTillbaka }) {
       </main>
     );
   }
+  if (barn.belo === "kpop") return <KpopAlbum barn={barn} belo={belo} onTillbaka={onTillbaka} />;
   const lista = barn.belo === "djur" ? DJUR : barn.belo === "klister" ? KLISTER : null;
   const antal = belo.samling || 0;
   const dagar = dagarIRad(belo.dagar || []);
@@ -1478,6 +1499,113 @@ function Beloningar({ barn, belo, bilder, egna, onBilder, onTillbaka }) {
             <p className="dov">Ett märke låses upp när du har tränat så många dagar i rad.</p>
           </>
         )}
+      </div>
+    </main>
+  );
+}
+
+// ---------- Emmys K-pop-stickers ----------
+// Allt ritas här i koden: gruppens färger, medlemmens namn och en liten figur.
+// Inga foton eller officiella loggor (repot är publikt).
+function Dekor({ typ, farg, storlek = 26 }) {
+  const p = { fill: farg };
+  const former = {
+    hjarta: <path d="M12 21 C5 15 2 12 2 8 a5 5 0 0 1 10-1 a5 5 0 0 1 10 1 c0 4-3 7-10 13z" {...p} />,
+    stjarna: <path d="M12 2 l3 6.5 7 .8-5.2 4.8 1.4 7L12 17.6 5.8 21.1l1.4-7L2 9.3l7-.8z" {...p} />,
+    gnistra: <path d="M12 1 C13 8 16 11 23 12 C16 13 13 16 12 23 C11 16 8 13 1 12 C8 11 11 8 12 1z" {...p} />,
+    mane: <path d="M15 2 A10 10 0 1 0 22 16 A8 8 0 1 1 15 2z" {...p} />,
+    blomma: <g {...p}>{[0, 72, 144, 216, 288].map((v) => <circle key={v} cx={12 + 5.5 * Math.cos((v - 90) * Math.PI / 180)} cy={12 + 5.5 * Math.sin((v - 90) * Math.PI / 180)} r="4.6" />)}<circle cx="12" cy="12" r="3.2" fill="#fff" /></g>,
+    krona: <path d="M2 18 L4 7 L9 12 L12 4 L15 12 L20 7 L22 18 Z M3 20 H21 V22 H3 Z" {...p} />,
+    not: <path d="M9 3 V16 A3.5 3.5 0 1 1 7 13 V3 Z M9 3 L20 1 V14 A3.5 3.5 0 1 1 18 11 V5 L9 7 Z" {...p} />,
+  };
+  return <svg viewBox="0 0 24 24" width={storlek} height={storlek} aria-hidden="true">{former[typ] || former.stjarna}</svg>;
+}
+
+// Gruppens egen lilla symbol (påhittad, inte gruppens logga).
+function GruppSymbol({ typ, farg, storlek = 40 }) {
+  const former = {
+    gnistra: <g fill={farg}><path d="M20 2 C21.5 13 27 18.5 38 20 C27 21.5 21.5 27 20 38 C18.5 27 13 21.5 2 20 C13 18.5 18.5 13 20 2z" /><circle cx="33" cy="7" r="2.5" /><circle cx="8" cy="32" r="2" /></g>,
+    planet: <g><circle cx="20" cy="20" r="10" fill={farg} /><ellipse cx="20" cy="20" rx="18" ry="6" fill="none" stroke={farg} strokeWidth="2.5" transform="rotate(-20 20 20)" /></g>,
+    horn: <g fill={farg}><path d="M8 18 Q6 6 13 2 Q12 10 16 15z" /><path d="M32 18 Q34 6 27 2 Q28 10 24 15z" /><circle cx="20" cy="26" r="12" /><circle cx="15" cy="25" r="2.5" fill="#fff" /><circle cx="25" cy="25" r="2.5" fill="#fff" /></g>,
+    katt: <g fill={farg}><path d="M6 16 L9 3 L17 11 Q20 10 23 11 L31 3 L34 16 Q36 34 20 36 Q4 34 6 16z" /><ellipse cx="14" cy="21" rx="2.6" ry="3.6" fill="#fff" /><ellipse cx="26" cy="21" rx="2.6" ry="3.6" fill="#fff" /></g>,
+  };
+  return <svg viewBox="0 0 40 40" width={storlek} height={storlek} aria-hidden="true">{former[typ]}</svg>;
+}
+
+function KpopSticker({ sticker, last = false, holo = false, ny = false }) {
+  const g = kpopGrupp(sticker.grupp);
+  const lutning = ((sticker.nr * 37) % 11) - 5; // varje sticker sitter lite snett, som i ett riktigt album
+  if (last) {
+    return (
+      <div className="kpopsticker last" style={{ transform: `rotate(${lutning / 2}deg)` }} aria-label={`Okänd ${g.namn}-sticker`}>
+        <span className="kpnamn">?</span>
+        <span className="kpgrupp">{g.namn}</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`kpopsticker${holo ? " holo" : ""}${ny ? " ny" : ""}`} style={{ background: `linear-gradient(145deg, ${g.fran}, ${g.till})`, color: g.text, transform: `rotate(${lutning}deg)` }}>
+      <span className="kpdekor"><Dekor typ={sticker.dekor} farg={g.text === "#FFFFFF" ? "#FBCFE8" : "#fff"} /></span>
+      <span className="kpsymbol"><GruppSymbol typ={g.symbol} farg={g.text} storlek={22} /></span>
+      <span className="kpnamn" style={{ fontSize: sticker.namn.length > 6 ? 15 : 18 }}>{sticker.namn}</span>
+      <span className="kpgrupp" style={g.namn.length > 8 ? { letterSpacing: 0, fontSize: 8.5 } : undefined}>{g.namn}</span>
+      {holo && <span className="kpholo">HOLO</span>}
+    </div>
+  );
+}
+
+function GruppSticker({ grupp, last = false, ny = false }) {
+  if (last) {
+    return (
+      <div className="kpopsticker grupp last" aria-label={`Bonussticker ${grupp.namn}, inte upplåst`}>
+        <GruppSymbol typ={grupp.symbol} farg="#D1D5DB" storlek={44} />
+        <span className="kpgrupp">Samla alla {grupp.medlemmar.length}</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`kpopsticker grupp holo${ny ? " ny" : ""}`} style={{ background: `linear-gradient(145deg, ${grupp.fran}, ${grupp.till})`, color: grupp.text }}>
+      <GruppSymbol typ={grupp.symbol} farg={grupp.text} storlek={44} />
+      <span className="kpnamn" style={{ fontSize: grupp.namn.length > 8 ? 10.5 : 16 }}>{grupp.namn}</span>
+      <span className="kpgrupp">Hela gruppen!</span>
+    </div>
+  );
+}
+
+function KpopAlbum({ barn, belo, onTillbaka }) {
+  const antal = belo.samling || 0;
+  const holoAntal = Math.max(0, antal - KPOP.length);
+  const klara = klaraGrupper(antal);
+  return (
+    <main className="app">
+      <div className="topp kpop">
+        <button className="pill" onClick={onTillbaka}>Tillbaka</button>
+        <h1>Mitt stickeralbum</h1>
+        <p style={{ opacity: 0.95 }}>
+          {Math.min(antal, KPOP.length)} av {KPOP.length} stickers. En ny för varje förhör, två om du har minst 80 % rätt.
+          {holoAntal > 0 && ` Holo-stickers: ${Math.min(holoAntal, KPOP.length)} av ${KPOP.length}.`}
+        </p>
+      </div>
+      <div className="sida">
+        <p className="dov">Samla alla i en grupp så låser du upp gruppens glittriga bonussticker. När albumet är fullt börjar jakten på holo-versioner.</p>
+        {KPOP_GRUPPER.map((g) => {
+          const lista = KPOP.filter((s) => s.grupp === g.id);
+          const harAntal = lista.filter((s) => s.nr <= antal).length;
+          return (
+            <section key={g.id} className="kort kpopsida" style={{ borderColor: g.till }}>
+              <div className="kpopsida-rubrik">
+                <GruppSymbol typ={g.symbol} farg={g.text === "#FFFFFF" ? g.till : g.text} storlek={28} />
+                <h2 style={{ margin: 0 }}>{g.namn}</h2>
+                <span className="dov" style={{ marginLeft: "auto" }}>{harAntal} av {lista.length}</span>
+              </div>
+              <div className="kpopgrid">
+                {lista.map((s) => <KpopSticker key={s.nr} sticker={s} last={s.nr > antal} holo={s.nr <= holoAntal} />)}
+                <GruppSticker grupp={g} last={!klara.includes(g.id)} />
+              </div>
+            </section>
+          );
+        })}
+        <p className="dov">Du har gjort {belo.forhor || 0} förhör och tränat {(belo.dagar || []).length} olika dagar.</p>
       </div>
     </main>
   );
