@@ -7,9 +7,11 @@ import { kodStammer } from "../../../lib/kod";
 import { tvattaAmne, sprakNamn } from "../../../lib/amnen";
 import { arDemo, demoForhor } from "../../../lib/demo";
 import { giltigtNp } from "../../../lib/np";
+import { gammaltProv, kanTranaGammalt } from "../../../lib/gamlaprov";
+import { hamtaGammaltProv } from "../../../lib/gamlaprovHamta";
 import { tvattaNiva, nivaInstruktion } from "../../../lib/niva";
 
-export const maxDuration = 60; // sekunder, så Vercel hinner vänta på svaret
+export const maxDuration = 120; // sekunder, så Vercel hinner hämta gamla prov och vänta på svaret
 
 const MODELL = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
 
@@ -105,6 +107,24 @@ function npInstruktion(np) {
   return `${bas} Utgå från det centrala innehållet i ${np.amne} för åk 7–9. Frågorna ska pröva begrepp, samband och förmåga att resonera, inte bara faktakunskap. Får gärna ha en kort källtext eller ett scenario i "lastext" ("sv-SE") som några frågor bygger på. "nyckelpunkter" = 4–6 centrala begrepp eller samband att kunna.`;
 }
 
+// Förhör byggt på ett riktigt, gammalt nationellt prov som Skolverket släppt fritt.
+function gammaltInstruktion(np) {
+  const prov = gammaltProv(np.ak, np.amne);
+  const ar = prov?.ar ? ` (${prov.ar})` : "";
+  const delar = np.ak === 3
+    ? ` Filen innehåller både matte och svenska/svenska som andraspråk: använd BARA delarna i ${np.amne === "Matte" ? "matematik" : "svenska (inte svenska som andraspråk)"}.`
+    : np.amne === "Svenska" ? " Filen kan innehålla både svenska och svenska som andraspråk: använd delarna i svenska." : "";
+  return `Eleven ska träna på ett GAMMALT NATIONELLT PROV i ${np.amne} för årskurs ${np.ak}${ar}. Skolverket har släppt det fritt från sekretess och det får användas. Provets innehåll finns i de bifogade dokumenten (tillgänglighetsanpassad textversion, så bilder kan saknas eller vara beskrivna i text).${delar}
+
+Gör ett förhör med 12 frågor som bygger på provets RIKTIGA uppgifter, från lätt till svår:
+- Använd provets egna uppgifter så nära originalet som går, men gör om dem till flerval eller korta skrivsvar så att de kan rättas automatiskt. Hoppa över uppgifter som kräver en bild som saknas, långa skrivuppgifter, muntliga delar och ljudfiler.
+- Om provet har en lästext: lägg ett lagom långt utdrag (högst ca 500 ord, välj ett sammanhängande stycke som frågorna bygger på) i "lastext" och rätt språkkod i "lastext_sprak". Annars tom.
+- Om provet har facit eller bedömningsanvisningar: använd dem för "ratt" och "forklaring". Annars räkna/resonera fram svaret själv och var noga.
+- Skriv i "sammanfattning" att det här är uppgifter från det nationella provet${ar} och vad provet testar.
+- "nyckelpunkter" = 3–4 tips inför provet utifrån vad just det här provet krävde.
+- Om dokumenten inte verkar innehålla något prov i ${np.amne}: gör i stället egna uppgifter i samma stil och skriv det i sammanfattningen.`;
+}
+
 function systemPrompt(barn, lage, amne, np, niva) {
   return `Du är en vänlig och pedagogisk hjälplärare för ${barn.namn}, ${barn.alder} år, som går i årskurs ${barn.arskurs} i den svenska skolan.
 
@@ -118,7 +138,7 @@ Regler:
 - Syftet är att eleven ska lära sig och träna, inte att få svaren serverade. Ledtrådar ska hjälpa eleven att tänka själv.
 - Frågor av typen "skriv" ska ha korta svar (ett ord, ett tal eller en kort fras) så att de kan rättas automatiskt.
 
-${np ? npInstruktion(np) : amnesInstruktion(amne)}
+${np?.gammalt ? gammaltInstruktion(np) : np ? npInstruktion(np) : amnesInstruktion(amne)}
 
 ${nivaInstruktion(niva, barn.arskurs)}
 
@@ -157,6 +177,7 @@ export async function POST(req) {
   const np = body.np && giltigtNp(Number(body.np.ak), String(body.np.amne))
     ? { ak: Number(body.np.ak), amne: String(body.np.amne) }
     : null;
+  if (np && body.np.gammalt && kanTranaGammalt(np.ak, np.amne)) np.gammalt = true;
   const amne = np
     ? { namn: `Nationellt prov ${np.amne}`, typ: np.amne === "Engelska" ? "sprak" : "annat", sprak: np.amne === "Engelska" ? "en-GB" : "" }
     : tvattaAmne(body.amne);
@@ -208,10 +229,28 @@ export async function POST(req) {
       data: String(dataUrl).replace(/^data:image\/\w+;base64,/, ""),
     },
   }))];
+  // Gammalt nationellt prov: hämta det från Skolverket nu (finns inte i repot).
+  let reserv = false;
+  if (np?.gammalt) {
+    try {
+      const prov = await hamtaGammaltProv(gammaltProv(np.ak, np.amne).fil);
+      for (const t of prov.texter) {
+        innehall.push({ type: "document", title: t.namn.split("/").pop().slice(0, 100), source: { type: "text", media_type: "text/plain", data: t.text } });
+      }
+      for (const p of prov.pdfer) {
+        innehall.push({ type: "document", title: p.namn.split("/").pop().slice(0, 100), source: { type: "base64", media_type: "application/pdf", data: p.base64 } });
+      }
+    } catch (e) {
+      // Går det inte att hämta provet blir det ett vanligt övningsprov i samma stil.
+      console.error("Gammalt prov:", e?.message);
+      np.gammalt = false;
+      reserv = true;
+    }
+  }
   innehall.push({
     type: "text",
     text:
-      (np ? `Gör mitt övningsprov i ${np.amne} för åk ${np.ak}.` : "Här är mitt material.") +
+      (np?.gammalt ? `Gör mitt förhör på det gamla nationella provet i ${np.amne} för åk ${np.ak}.` : np ? `Gör mitt övningsprov i ${np.amne} för åk ${np.ak}.` : "Här är mitt material.") +
       (anteckning ? ` Det här vill jag träna på: ${String(anteckning).slice(0, 300)}` : ""),
   });
 
@@ -226,7 +265,10 @@ export async function POST(req) {
     });
     const text = svar.content.filter((c) => c.type === "text").map((c) => c.text).join("");
     if (!text) throw new Error("Inget förhör i svaret");
-    return Response.json(JSON.parse(text));
+    const forhor = JSON.parse(text);
+    if (reserv) forhor.reserv = "Det gamla provet gick inte att hämta från Skolverket just nu, så du fick ett övningsprov i samma stil i stället.";
+    if (np?.gammalt) forhor.gammalt = true;
+    return Response.json(forhor);
   } catch (e) {
     console.error("Claude-fel:", e?.status, e?.message);
     return Response.json({ fel: forklaraFel(e) }, { status: 502 });
