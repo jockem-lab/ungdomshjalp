@@ -8,6 +8,7 @@ import { BARN, hittaBarn } from "../lib/barn";
 import { TYPER, SPRAK, STANDARD_AMNEN, sprakNamn } from "../lib/amnen";
 import { arDemo } from "../lib/demo";
 import { npForBarn } from "../lib/np";
+import { gammaltProv, SKOLVERKET_SIDA } from "../lib/gamlaprov";
 import { NIVAER, nivaNamn } from "../lib/niva";
 import { lasFil, FIL_ACCEPT } from "../lib/filer";
 import { dagensUttryck, slumpa, PEPP_RATT, PEPP_FEL } from "../lib/koreanska";
@@ -1117,21 +1118,24 @@ function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
   const np = npForBarn(barn.arskurs);
   const [amne, setAmne] = useState(null);
   const [niva, setNiva] = useState("blandat");
+  const [sort, setSort] = useState("gammalt"); // "gammalt" = Skolverkets riktiga gamla prov, "nytt" = eget övningsprov
   const [vantar, setVantar] = useState(false);
   const [fel, setFel] = useState("");
+  const gammalt = amne ? gammaltProv(np.ak, amne) : null;
+  const tranaGammalt = Boolean(gammalt?.fil) && sort === "gammalt";
 
   async function starta() {
     setVantar(true);
     setFel("");
     try {
-      const data = await hamtaForhor({ kod, barnId: barn.id, np: { ak: np.ak, amne }, niva }, onFelKod);
+      const data = await hamtaForhor({ kod, barnId: barn.id, np: { ak: np.ak, amne, gammalt: tranaGammalt }, niva: tranaGammalt ? "blandat" : niva }, onFelKod);
       if (!data) return;
       onKlar({
         ...data,
         id: Date.now().toString(36),
         lage: "prov",
-        niva,
-        amneNamn: `Nationellt prov · ${amne}`,
+        niva: tranaGammalt ? "blandat" : niva,
+        amneNamn: `Nationellt prov · ${amne}${data.gammalt ? ` · gammalt prov${gammalt?.ar ? " " + gammalt.ar : ""}` : ""}`,
         amneTyp: amne === "Engelska" ? "sprak" : "annat",
         sprak: amne === "Engelska" ? "en-GB" : "",
         skapad: new Date().toISOString(),
@@ -1142,7 +1146,7 @@ function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
     }
   }
 
-  if (vantar) return <Laddar barn={barn} text="Din hjälplärare skriver ett övningsprov…" />;
+  if (vantar) return <Laddar barn={barn} text={tranaGammalt ? "Din hjälplärare hämtar det gamla provet från Skolverket…" : "Din hjälplärare skriver ett övningsprov…"} />;
 
   return (
     <main className="app">
@@ -1161,11 +1165,37 @@ function NationellaProv({ barn, kod, onTillbaka, onKlar, onFelKod }) {
             <Chip key={a} aktiv={amne === a} farg={barn.farg} onClick={() => setAmne(a)}>{a}</Chip>
           ))}
         </div>
-        <NivaVal barn={barn} niva={niva} setNiva={setNiva} />
-        <p className="dov">Proven är egna övningsuppgifter i samma stil som de riktiga, inte de riktiga proven. Svenska och engelska börjar med en text att läsa (eller lyssna på).</p>
+        {gammalt?.fil && (
+          <>
+            <span style={{ fontWeight: 800, fontSize: 15 }}>Vad vill du träna på?</span>
+            <div className="chips">
+              <Chip aktiv={sort === "gammalt"} farg={barn.farg} onClick={() => setSort("gammalt")}>
+                Gamla riktiga provet{gammalt.ar ? ` ${gammalt.ar}` : ""}
+              </Chip>
+              <Chip aktiv={sort === "nytt"} farg={barn.farg} onClick={() => setSort("nytt")}>Nytt övningsprov</Chip>
+            </div>
+          </>
+        )}
+        {tranaGammalt ? (
+          <p className="dov">
+            Uppgifterna kommer från ett riktigt nationellt prov som Skolverket har släppt fritt. Din hjälplärare gör om dem så att du kan svara här i appen.
+            Vill du göra hela provet på papper? <a href={gammalt.fil} target="_blank" rel="noreferrer">Ladda ner det från Skolverket</a> (zip-fil).
+          </p>
+        ) : (
+          <>
+            <NivaVal barn={barn} niva={niva} setNiva={setNiva} />
+            <p className="dov">Övningsproven är egna uppgifter i samma stil som de riktiga. Svenska och engelska börjar med en text att läsa (eller lyssna på).</p>
+          </>
+        )}
+        {amne && !gammalt?.fil && gammalt?.mer && (
+          <p className="dov">Skolverket har inget gammalt {amne.toLowerCase()}prov att hämta, men det finns äldre prov hos <a href={gammalt.mer} target="_blank" rel="noreferrer">universitetet som gör provet</a>.</p>
+        )}
+        {gammalt?.fil && gammalt.mer && (
+          <p className="dov">Fler gamla prov och exempeluppgifter: <a href={gammalt.mer} target="_blank" rel="noreferrer">universitetet som gör provet</a> och <a href={SKOLVERKET_SIDA} target="_blank" rel="noreferrer">Skolverket</a>.</p>
+        )}
         {fel && <p className="fel">{fel}</p>}
         <button className="knapp" style={{ background: barn.farg, marginTop: "auto" }} disabled={!amne} onClick={starta}>
-          Starta övningsprov
+          {tranaGammalt ? "Träna på gamla provet" : "Starta övningsprov"}
         </button>
       </div>
     </main>
@@ -1865,6 +1895,7 @@ function Forhor({ barn, kod, forhor, bilder, onKlar, onAvbryt, onBelona, onFrams
           <p className="amne" style={{ color: barn.farg, margin: 0 }}>{forhor.amneNamn || forhor.amne}</p>
           <h1>{lastext ? forhor.titel : "Det viktigaste"}</h1>
           <p>{forhor.sammanfattning}</p>
+          {forhor.reserv && <p className="fel" style={{ background: "#FEF3C7", color: "#78350F" }}>{forhor.reserv}</p>}
           {lastext && (
             <div className="kort">
               <span className="amne" style={{ color: barn.farg }}>Läs texten</span>
