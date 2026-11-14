@@ -14,11 +14,10 @@ export async function GET(req) {
     const d = await hamtaGammaltProv(prov.fil);
     return Response.json({
       ok: true,
+      skickas_till_claude: { pdfer: d.pdfer.map((x) => x.namn), texter: d.texter.map((t) => ({ namn: t.namn, tecken: t.text.length })) },
       filer_i_zip: d.filnamn.length,
       filnamn: d.filnamn.slice(0, 60),
-      texter: d.texter.map((t) => ({ namn: t.namn, tecken: t.text.length })),
-      pdfer: d.pdfer.map((x) => x.namn),
-    });
+    }, { headers: { "content-type": "application/json; charset=utf-8" } });
   } catch (e) {
     return Response.json({ ok: false, fel: String(e?.message || e) }, { status: 502 });
   }
