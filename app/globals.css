@@ -259,3 +259,23 @@ body[data-tema="capy"] .fotoyta { border-radius: 28px; }
 .veckosticker.stor { width: 120px; min-height: 120px; animation: avslojning 0.8s ease-out; }
 .stickervinst { align-items: center; text-align: center; border: 3px solid; }
 @keyframes avslojning { 0% { transform: scale(0.3) rotate(-20deg); opacity: 0; } 70% { transform: scale(1.12) rotate(6deg); opacity: 1; } 100% { transform: none; } }
+
+/* Emmys K-pop-stickeralbum */
+.kpopsida { border: 3px solid; gap: 12px; }
+.kpopsida-rubrik { display: flex; align-items: center; gap: 10px; }
+.kpopgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; padding: 4px; }
+@media (min-width: 800px) { .kpopgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.kpopsticker { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 108px; min-width: 96px; padding: 22px 6px 10px; border-radius: 20px; border: 4px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,0.18); text-align: center; }
+.kpopsticker .kpnamn { font-size: 18px; font-weight: 800; letter-spacing: 0.01em; line-height: 1.1; white-space: nowrap; }
+.kpopsticker .kpgrupp { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.85; }
+.kpopsticker .kpdekor { position: absolute; top: 5px; left: 7px; }
+.kpopsticker .kpsymbol { position: absolute; top: 5px; right: 7px; opacity: 0.8; }
+.kpopsticker .kpholo { position: absolute; bottom: 3px; right: 6px; font-size: 8px; font-weight: 800; letter-spacing: 0.1em; }
+.kpopsticker.last { background: #F3F4F6; color: #9CA3AF; border: 3px dashed #D1D5DB; box-shadow: none; }
+.kpopsticker.last .kpnamn { font-size: 30px; }
+.kpopsticker.grupp { padding-top: 10px; }
+.kpopsticker.holo::after { content: ""; position: absolute; inset: -50%; background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.75) 45%, rgba(186,230,253,0.5) 50%, rgba(251,207,232,0.6) 55%, transparent 65%); animation: hologlans 3.2s ease-in-out infinite; pointer-events: none; }
+.kpopsticker.ny { animation: avslojning 0.8s ease-out; }
+.vinst .kpopsticker { width: 120px; }
+@keyframes hologlans { 0% { transform: translateX(-40%); } 60%, 100% { transform: translateX(40%); } }
+@media (prefers-reduced-motion: reduce) { .kpopsticker.holo::after, .kpopsticker.ny { animation: none; } }
