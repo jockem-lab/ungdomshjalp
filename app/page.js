@@ -12,7 +12,8 @@ import { gammaltProv, SKOLVERKET_SIDA } from "../lib/gamlaprov";
 import { NIVAER, nivaNamn } from "../lib/niva";
 import { lasFil, FIL_ACCEPT } from "../lib/filer";
 import { dagensUttryck, slumpa, PEPP_RATT, PEPP_FEL } from "../lib/koreanska";
-import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, KPOP, KPOP_GRUPPER, kpopGrupp, klaraGrupper, tomBelo, dagarIRad, belona } from "../lib/belo";
+import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, KPOP, KPOP_GRUPPER, kpopGrupp, klaraGrupper, tomBelo, dagarIRad, belona, medJustering, upplasta } from "../lib/belo";
+import { STICKERS } from "../lib/poang";
 
 function lasLagrat(nyckel, standard) {
   try {
@@ -241,11 +242,14 @@ export default function App() {
   const [kod, setKod] = useState(null); // familjekoden, null = inte inloggad än
   const [laddat, setLaddat] = useState(false);
   const [barnId, setBarnId] = useState(null);
+  const barnRef = useRef(null); // vilket barn som är valt just nu, för svar som kommer sent
+  barnRef.current = barnId;
   const [skarm, setSkarm] = useState("valj");
   const [material, setMaterial] = useState([]);
   const [aktivt, setAktivt] = useState(null); // förhöret som körs
   const [amnen, setAmnen] = useState(STANDARD_AMNEN);
-  const [belo, setBelo] = useState(tomBelo());
+  const [belo, setBelo] = useState(tomBelo()); // det barnet har tjänat ihop
+  const [justering, setJustering] = useState(0); // förälderns ändring från föräldravyn
   const [bilder, setBilder] = useState({ logo: "", spelare: {} }); // egna bilder, bara på den här enheten
   const [wiki, setWiki] = useState({ logo: "", spelare: {} });
   const [prov, setProv] = useState([]); // barnets provschema
@@ -264,18 +268,42 @@ export default function App() {
     if (barnId) {
       setMaterial(lasLagrat(`${prefix}material-${barnId}`, []));
       setAmnen(lasLagrat(`${prefix}amnen-${barnId}`, STANDARD_AMNEN));
-      setBelo(lasLagrat(`${prefix}belo-${barnId}`, tomBelo()));
+      const lokal = lasLagrat(`${prefix}belo-${barnId}`, tomBelo());
+      setBelo(lokal);
+      setJustering(demo ? 0 : lasLagrat(`justering-${barnId}`, 0));
+      if (!demo) synkaBelo(barnId, lokal);
       setProv(lasLagrat(`${prefix}prov-${barnId}`, []));
       setBilder(lasLagrat(`bilder-${barnId}`, { logo: "", spelare: {} }));
     }
   }, [barnId, prefix]);
 
+  // Skickar barnets belöningar till databasen (så att föräldravyn ser dem) och hämtar förälderns justering.
+  // Databasen behåller det största av mobilens och sitt eget läge, så två enheter går ihop.
+  function synkaBelo(id, lokal) {
+    if (!kod || arDemo(kod)) return;
+    fetch("/api/belo", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kod, barnId: id, belo: lokal }) })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.synkat) return;
+        const ny = { ...lokal, ...d.belo };
+        sparaLagrat(`belo-${id}`, ny);
+        sparaLagrat(`justering-${id}`, d.justering || 0);
+        if (barnRef.current === id) { setBelo(ny); setJustering(d.justering || 0); }
+      })
+      .catch(() => {});
+  }
+
+  // Det barnet ser: det intjänade plus förälderns justering.
+  const beloVisad = medJustering(belo, justering);
+
   // Ger barnet en belöning efter ett avklarat förhör eller kortpass.
   function geBelöning(andel) {
     const b = hittaBarn(barnId);
-    const { belo: ny, vinst } = belona(belo, b?.belo || "dagar", andel);
+    const { belo: nyVisad, vinst } = belona(beloVisad, b?.belo || "dagar", andel);
+    const ny = { ...nyVisad, samling: (belo.samling || 0) + ((nyVisad.samling || 0) - (beloVisad.samling || 0)) };
     setBelo(ny);
     sparaLagrat(`${prefix}belo-${barnId}`, ny);
+    if (!demo) synkaBelo(barnId, ny);
     return vinst;
   }
 
@@ -464,7 +492,7 @@ export default function App() {
   }
 
   if (skarm === "belo") {
-    return <Beloningar barn={barn} belo={belo} bilder={allaBilder} egna={bilder} onBilder={uppdateraBilder} onTillbaka={() => setSkarm("hem")} />;
+    return <Beloningar barn={barn} belo={beloVisad} bilder={allaBilder} egna={bilder} onBilder={uppdateraBilder} onTillbaka={() => setSkarm("hem")} />;
   }
 
   if (skarm === "np") {
@@ -501,7 +529,7 @@ export default function App() {
       material={material}
       onAmnen={() => setSkarm("amnen")}
       onNp={() => setSkarm("np")}
-      belo={belo}
+      belo={beloVisad}
       bilder={allaBilder}
       onBelo={() => setSkarm("belo")}
       topp={topp}
@@ -671,7 +699,7 @@ function MinaStickers({ barn, stickers }) {
             <span key={s.start} className="veckosticker" style={{ background: s.farg }}>
               <span style={{ fontSize: 38 }} aria-hidden="true">{s.tecken}</span>
               <span style={{ fontSize: 12, fontWeight: 800 }}>{s.namn}</span>
-              <span style={{ fontSize: 11 }}>Vecka {s.vecka}</span>
+              <span style={{ fontSize: 11 }}>{s.gava ? "Extra" : `Vecka ${s.vecka}`}</span>
             </span>
           ))}
         </div>
@@ -696,11 +724,11 @@ function NyStickerVinst({ barn, stickers, forraVecka }) {
   if (!ny) return null;
   return (
     <div className="kort stickervinst" style={{ borderColor: barn.farg }}>
-      <span className="dov" style={{ fontWeight: 800 }}>Du vann vecka {ny.vecka}!</span>
+      <span className="dov" style={{ fontWeight: 800 }}>{ny.gava ? "Du har fått en extra sticker!" : `Du vann vecka ${ny.vecka}!`}</span>
       <span className="veckosticker stor" style={{ background: ny.farg }}>
         <span style={{ fontSize: 64 }} aria-hidden="true">{ny.tecken}</span>
       </span>
-      <strong style={{ fontSize: 20 }}>Den hemliga stickern var {ny.namn}</strong>
+      <strong style={{ fontSize: 20 }}>{ny.gava ? `Det är ${ny.namn}` : `Den hemliga stickern var ${ny.namn}`}</strong>
       <p className="dov">Den finns nu på din profil.</p>
       <button className="knapp" style={{ background: barn.farg }} onClick={() => {
         const lista = [...sedda, ny.start];
@@ -770,6 +798,25 @@ function Foraldravy({ demo, onTillbaka }) {
   }
 
   useEffect(() => { if (adminkod) hamta(adminkod); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Förälderns ändringar av stickers. I testläget ändras bara det som syns på skärmen.
+  async function andra(atgard) {
+    setFel("");
+    if (data.demo) {
+      setData(demoAndring(data, atgard));
+      return;
+    }
+    setVantar(true);
+    try {
+      const r = await fetch("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adminkod, atgard }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.fel || `Något gick fel (felkod ${r.status}).`);
+      setData(d);
+    } catch (e) {
+      setFel(e.message);
+    }
+    setVantar(false);
+  }
 
   if (!data) {
     return (
@@ -887,6 +934,18 @@ function Foraldravy({ demo, onTillbaka }) {
             </div>
           </div>
         )}
+        {data.belo && (
+          <>
+            <h2>Stickers och belöningar</h2>
+            <p className="dov">Här ser ni vad varje barn har låst upp. Ni kan fylla på, ta bort eller ge en extra hemlig sticker. Barnet ser ändringen nästa gång appen öppnas på deras enhet.</p>
+            {fel && <p className="fel">{fel}</p>}
+            <div className="adminrutnat">
+              {BARN.map((b) => (
+                <BeloAdmin key={b.id} barn={b} belo={data.belo[b.id]} stickers={data.topplista?.stickers?.[b.id] || []} vantar={vantar} onAndra={andra} />
+              ))}
+            </div>
+          </>
+        )}
         <h2>Senaste passen</h2>
         <div className="chips">
           <Chip aktiv={!visaBarn} farg="#1F2937" onClick={() => setVisaBarn(null)}>Alla</Chip>
@@ -913,6 +972,109 @@ function Foraldravy({ demo, onTillbaka }) {
         <button className="tabort" onClick={() => hamta(adminkod)}>{vantar ? "Hämtar…" : "Uppdatera"}</button>
       </div>
     </main>
+  );
+}
+
+// Testläget: samma ändringar som databasen gör, fast bara i minnet.
+function demoAndring(data, a) {
+  const ny = { ...data, belo: { ...data.belo }, topplista: data.topplista && { ...data.topplista, stickers: { ...data.topplista.stickers } } };
+  const b = ny.belo[a.barnId];
+  if (a.typ === "antal" && b) ny.belo[a.barnId] = { ...b, justering: Math.max(0, Math.min(500, a.antal)) - b.samling };
+  const st = ny.topplista?.stickers?.[a.barnId];
+  if (a.typ === "ge-sticker" && st) {
+    const [tecken, namn, farg] = STICKERS[a.nr];
+    ny.topplista.stickers[a.barnId] = [{ start: `gava-${Date.now().toString(36)}`, gava: true, tecken, namn, farg }, ...st];
+  }
+  if (a.typ === "ta-bort-sticker" && st) ny.topplista.stickers[a.barnId] = st.filter((x) => x.start !== a.id);
+  return ny;
+}
+
+const BELO_NAMN = { djur: "Djursamling", klister: "Klistermärken", fotboll: "Liverpool-spelarkort", kpop: "K-pop-stickers", dagar: "Dagar i rad" };
+
+// Ett barns belöningar i föräldravyn: vad som är upplåst, ändra antal och hemliga stickers.
+function BeloAdmin({ barn, belo, stickers, vantar, onAndra }) {
+  const b = belo || { samling: 0, forhor: 0, dagar: [], justering: 0 };
+  const totalt = Math.max(0, b.samling + (b.justering || 0));
+  const [antal, setAntal] = useState(String(totalt));
+  const [gava, setGava] = useState("0");
+  useEffect(() => { setAntal(String(totalt)); }, [totalt]);
+  const samlar = barn.belo !== "dagar";
+  const u = samlar ? upplasta(barn.belo, totalt) : null;
+  const satt = (n) => onAndra({ typ: "antal", barnId: barn.id, antal: Math.max(0, Math.min(500, n)) });
+
+  return (
+    <div className="kort adminkort" style={{ borderTop: `6px solid ${barn.farg}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <span className="avatar" style={{ background: barn.farg, width: 40, height: 40, fontSize: 18 }}>{barn.namn[0]}</span>
+        <span style={{ display: "flex", flexDirection: "column" }}>
+          <strong style={{ fontSize: 18 }}>{barn.namn}</strong>
+          <span className="dov">{BELO_NAMN[barn.belo] || "Belöningar"}</span>
+        </span>
+      </div>
+
+      {samlar ? (
+        <>
+          <div className="nyckeltal">
+            <span><strong>{Math.min(totalt, u.max)} av {u.max}</strong><span className="dov">{u.enhet}</span></span>
+            <span><strong>{b.forhor}</strong><span className="dov">förhör</span></span>
+            <span><strong>{b.dagar.length}</strong><span className="dov">dagar</span></span>
+          </div>
+          {u.saker.length === 0 ? <p className="dov">Inget upplåst än.</p> : (
+            <div className="upplast">
+              {u.saker.map((x, i) => (
+                <span key={i} className="upplast-sak" style={{ background: x.farg || "#F9FAFB", color: x.text || undefined }} title={x.grupp ? `${x.namn} (${x.grupp})` : x.namn || ""}>
+                  {x.tecken && <span aria-hidden="true" style={{ fontSize: 18 }}>{x.tecken}</span>}
+                  {x.namn && <span>{x.nr ? `${x.nr} ` : ""}{x.namn}</span>}
+                </span>
+              ))}
+            </div>
+          )}
+          {u.bonus?.length > 0 && <p className="dov">Bonusstickers: {u.bonus.join(", ")}.</p>}
+          {u.holo > 0 && <p className="dov">Holo-stickers (andra varvet): {u.holo} av {u.max}.</p>}
+          {u.varv > 0 && <p className="dov">Hela samlingen är klar {u.varv} {u.varv === 1 ? "gång" : "gånger"}, totalt {totalt}.</p>}
+          {b.justering !== 0 && (
+            <p className="dov">Tjänat själv: {b.samling}. Ni har {b.justering > 0 ? `lagt till ${b.justering}` : `tagit bort ${-b.justering}`}.</p>
+          )}
+          <div className="beloandra">
+            <button className="pill" disabled={vantar || totalt === 0} onClick={() => satt(totalt - 1)} aria-label="Ta bort en">−1</button>
+            <button className="pill" disabled={vantar} onClick={() => satt(totalt + 1)} aria-label="Lägg till en">+1</button>
+            <form style={{ display: "flex", gap: 6, alignItems: "center" }} onSubmit={(e) => { e.preventDefault(); satt(Number(antal) || 0); }}>
+              <input className="falt" style={{ width: 76 }} type="number" min="0" max="500" inputMode="numeric" value={antal} onChange={(e) => setAntal(e.target.value)} aria-label="Antal totalt" />
+              <button className="pill" disabled={vantar || Number(antal) === totalt}>Spara</button>
+            </form>
+            {b.justering !== 0 && <button className="tabort" disabled={vantar} onClick={() => satt(b.samling)}>Återställ till det {barn.namn} tjänat</button>}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="nyckeltal">
+            <span><strong>{dagarIRad(b.dagar)}</strong><span className="dov">dagar i rad</span></span>
+            <span><strong>{b.forhor}</strong><span className="dov">förhör</span></span>
+            <span><strong>{MARKEN.filter((m) => langstaKedja(b.dagar) >= m).length} av {MARKEN.length}</strong><span className="dov">märken</span></span>
+          </div>
+          <p className="dov">{barn.namn} samlar dagar i rad i stället för stickers, så här finns inget antal att ändra. Hemliga stickers kan ni ge nedan.</p>
+        </>
+      )}
+
+      <strong>Hemliga stickers</strong>
+      {stickers.length === 0 ? <p className="dov">Inga än.</p> : (
+        <div className="upplast">
+          {stickers.map((s) => (
+            <span key={s.start} className="upplast-sak" style={{ background: s.farg }}>
+              <span aria-hidden="true" style={{ fontSize: 18 }}>{s.tecken}</span>
+              <span>{s.namn} · {s.gava ? "extra" : `v. ${s.vecka}`}</span>
+              <button className="ta-bort-x" disabled={vantar} aria-label={`Ta bort ${s.namn}`} onClick={() => onAndra({ typ: "ta-bort-sticker", barnId: barn.id, id: s.start })}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="beloandra">
+        <select className="falt" style={{ flex: 1, minWidth: 0 }} value={gava} onChange={(e) => setGava(e.target.value)} aria-label="Välj sticker">
+          {STICKERS.map(([tecken, namn], i) => <option key={i} value={i}>{tecken} {namn}</option>)}
+        </select>
+        <button className="pill" disabled={vantar} onClick={() => onAndra({ typ: "ge-sticker", barnId: barn.id, nr: Number(gava) })}>Ge sticker</button>
+      </div>
+    </div>
   );
 }
 
