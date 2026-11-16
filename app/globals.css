@@ -279,3 +279,9 @@ body[data-tema="capy"] .fotoyta { border-radius: 28px; }
 .vinst .kpopsticker { width: 120px; }
 @keyframes hologlans { 0% { transform: translateX(-40%); } 60%, 100% { transform: translateX(40%); } }
 @media (prefers-reduced-motion: reduce) { .kpopsticker.holo::after, .kpopsticker.ny { animation: none; } }
+
+/* Föräldravyn: barnens stickers och belöningar */
+.upplast { display: flex; flex-wrap: wrap; gap: 6px; max-height: 220px; overflow-y: auto; }
+.upplast-sak { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 999px; border: 1px solid #E5E7EB; font-size: 13px; font-weight: 600; color: #1F2937; }
+.beloandra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ta-bort-x { background: none; border: 0; color: #6B7280; font-size: 16px; line-height: 1; padding: 0 2px; cursor: pointer; }
