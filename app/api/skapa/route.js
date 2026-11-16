@@ -114,7 +114,7 @@ function gammaltInstruktion(np) {
   const delar = np.ak === 3
     ? ` Filen innehåller både matte och svenska/svenska som andraspråk: använd BARA delarna i ${np.amne === "Matte" ? "matematik" : "svenska (inte svenska som andraspråk)"}.`
     : np.amne === "Svenska" ? " Filen kan innehålla både svenska och svenska som andraspråk: använd delarna i svenska." : "";
-  return `Eleven ska träna på ett GAMMALT NATIONELLT PROV i ${np.amne} för årskurs ${np.ak}${ar}. Skolverket har släppt det fritt från sekretess och det får användas. Provets innehåll finns i de bifogade dokumenten (tillgänglighetsanpassad textversion, så bilder kan saknas eller vara beskrivna i text).${delar}
+  return `Eleven ska träna på ett GAMMALT NATIONELLT PROV i ${np.amne} för årskurs ${np.ak}${ar}. Skolverket har släppt det fritt från sekretess och det får användas. Provet finns i de bifogade dokumenten: PDF:en är själva provet (elevens provhäfte). Word-texterna är lärarinstruktioner för provet; där kan facit, bedömning och uppgifter som läraren läser upp finnas, men frågorna ska bygga på elevens provhäfte.${delar}
 
 Gör ett förhör med 12 frågor som bygger på provets RIKTIGA uppgifter, från lätt till svår:
 - Använd provets egna uppgifter så nära originalet som går, men gör om dem till flerval eller korta skrivsvar så att de kan rättas automatiskt. Hoppa över uppgifter som kräver en bild som saknas, långa skrivuppgifter, muntliga delar och ljudfiler.
