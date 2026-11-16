@@ -13,7 +13,7 @@ import { NIVAER, nivaNamn } from "../lib/niva";
 import { lasFil, FIL_ACCEPT } from "../lib/filer";
 import { dagensUttryck, slumpa, PEPP_RATT, PEPP_FEL } from "../lib/koreanska";
 import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, KPOP, KPOP_GRUPPER, kpopGrupp, klaraGrupper, tomBelo, dagarIRad, belona, medJustering, upplasta } from "../lib/belo";
-import { STICKERS } from "../lib/poang";
+import { STICKERS, EXTRA_STICKERS, gavoSticker } from "../lib/poang";
 
 function lasLagrat(nyckel, standard) {
   try {
@@ -713,9 +713,9 @@ function NyStickerVinst({ barn, stickers, forraVecka }) {
   const nyckel = `sedda-stickers-${barn.id}`;
   const [sedda, setSedda] = useState(() => lasLagrat(nyckel, null));
   useEffect(() => {
-    // Första gången: räkna allt som redan vunnits som sett, utom förra veckans.
+    // Första gången: räkna allt som redan vunnits som sett, utom förra veckans och stickers från föräldrarna.
     if (sedda === null) {
-      const start = stickers.filter((s) => s.vecka !== forraVecka).map((s) => s.start);
+      const start = stickers.filter((s) => !s.gava && s.vecka !== forraVecka).map((s) => s.start);
       setSedda(start);
       sparaLagrat(nyckel, start);
     }
@@ -982,8 +982,8 @@ function demoAndring(data, a) {
   if (a.typ === "antal" && b) ny.belo[a.barnId] = { ...b, justering: Math.max(0, Math.min(500, a.antal)) - b.samling };
   const st = ny.topplista?.stickers?.[a.barnId];
   if (a.typ === "ge-sticker" && st) {
-    const [tecken, namn, farg] = STICKERS[a.nr];
-    ny.topplista.stickers[a.barnId] = [{ start: `gava-${Date.now().toString(36)}`, gava: true, tecken, namn, farg }, ...st];
+    const s = gavoSticker(a.sticker);
+    if (s) ny.topplista.stickers[a.barnId] = [{ start: `gava-${Date.now().toString(36)}`, gava: true, ...s }, ...st];
   }
   if (a.typ === "ta-bort-sticker" && st) ny.topplista.stickers[a.barnId] = st.filter((x) => x.start !== a.id);
   return ny;
@@ -996,7 +996,7 @@ function BeloAdmin({ barn, belo, stickers, vantar, onAndra }) {
   const b = belo || { samling: 0, forhor: 0, dagar: [], justering: 0 };
   const totalt = Math.max(0, b.samling + (b.justering || 0));
   const [antal, setAntal] = useState(String(totalt));
-  const [gava, setGava] = useState("0");
+  const [gava, setGava] = useState(barn.belo === "fotboll" ? EXTRA_STICKERS[0].id : "v0");
   useEffect(() => { setAntal(String(totalt)); }, [totalt]);
   const samlar = barn.belo !== "dagar";
   const u = samlar ? upplasta(barn.belo, totalt) : null;
@@ -1070,9 +1070,16 @@ function BeloAdmin({ barn, belo, stickers, vantar, onAndra }) {
       )}
       <div className="beloandra">
         <select className="falt" style={{ flex: 1, minWidth: 0 }} value={gava} onChange={(e) => setGava(e.target.value)} aria-label="Välj sticker">
-          {STICKERS.map(([tecken, namn], i) => <option key={i} value={i}>{tecken} {namn}</option>)}
+          {[...new Set(EXTRA_STICKERS.map((e) => e.tema))].map((tema) => (
+            <optgroup key={tema} label={`${tema}-tema`}>
+              {EXTRA_STICKERS.filter((e) => e.tema === tema).map((e) => <option key={e.id} value={e.id}>{e.tecken} {e.namn}</option>)}
+            </optgroup>
+          ))}
+          <optgroup label="Hemliga veckostickers">
+            {STICKERS.map(([tecken, namn], i) => <option key={i} value={`v${i}`}>{tecken} {namn}</option>)}
+          </optgroup>
         </select>
-        <button className="pill" disabled={vantar} onClick={() => onAndra({ typ: "ge-sticker", barnId: barn.id, nr: Number(gava) })}>Ge sticker</button>
+        <button className="pill" disabled={vantar} onClick={() => onAndra({ typ: "ge-sticker", barnId: barn.id, sticker: gava })}>Ge sticker</button>
       </div>
     </div>
   );
