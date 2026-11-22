@@ -12,7 +12,7 @@ import { gammaltProv, SKOLVERKET_SIDA } from "../lib/gamlaprov";
 import { NIVAER, nivaNamn } from "../lib/niva";
 import { lasFil, FIL_ACCEPT } from "../lib/filer";
 import { dagensUttryck, slumpa, PEPP_RATT, PEPP_FEL } from "../lib/koreanska";
-import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, KPOP, KPOP_GRUPPER, kpopGrupp, klaraGrupper, tomBelo, dagarIRad, belona, medJustering, upplasta } from "../lib/belo";
+import { DJUR, KLISTER, SPELARE, MARKEN, WIKI_TITEL, KLUBB_WIKI, KPOP, KPOP_GRUPPER, kpopGrupp, klaraGrupper, tomBelo, dagarIRad, belona, medJustering, upplasta, langstaKedja, utmaningsLage, allaUtmaningar, spelareMedNamn, nyUtm, GULD, HALO } from "../lib/belo";
 import { STICKERS, EXTRA_STICKERS, gavoSticker } from "../lib/poang";
 
 function lasLagrat(nyckel, standard) {
@@ -69,8 +69,9 @@ function litenBild(fil, maxSida = 260, format = "image/jpeg") {
 // Inget sparas i repot. Resultatet sparas i webbläsaren en vecka.
 async function hamtaWikiBilder() {
   const cache = lasLagrat("wikibilder", null);
-  if (cache && Date.now() - cache.tid < 7 * 86400000) return cache.data;
   const titlar = [KLUBB_WIKI, ...SPELARE.map(([namn]) => WIKI_TITEL[namn] || namn)];
+  // Hämtas om när det kommit nya spelare, annars en gång i veckan.
+  if (cache && cache.antal === titlar.length && Date.now() - cache.tid < 7 * 86400000) return cache.data;
   const tillTitel = {}; // wikititel -> vårt namn
   SPELARE.forEach(([namn]) => { tillTitel[WIKI_TITEL[namn] || namn] = namn; });
   const data = { logo: "", spelare: {} };
@@ -92,7 +93,7 @@ async function hamtaWikiBilder() {
       else if (tillTitel[fraga]) data.spelare[tillTitel[fraga]] = bild;
     }
   }
-  sparaLagrat("wikibilder", { tid: Date.now(), data });
+  sparaLagrat("wikibilder", { tid: Date.now(), antal: titlar.length, data });
   return data;
 }
 
@@ -268,7 +269,12 @@ export default function App() {
     if (barnId) {
       setMaterial(lasLagrat(`${prefix}material-${barnId}`, []));
       setAmnen(lasLagrat(`${prefix}amnen-${barnId}`, STANDARD_AMNEN));
-      const lokal = lasLagrat(`${prefix}belo-${barnId}`, tomBelo());
+      let lokal = lasLagrat(`${prefix}belo-${barnId}`, tomBelo());
+      // Verners utmaningar för guld- och halostickers räknas från första gången appen öppnas med dem.
+      if (hittaBarn(barnId)?.belo === "fotboll" && !lokal.utm) {
+        lokal = { ...lokal, utm: nyUtm() };
+        sparaLagrat(`${prefix}belo-${barnId}`, lokal);
+      }
       setBelo(lokal);
       setJustering(demo ? 0 : lasLagrat(`justering-${barnId}`, 0));
       if (!demo) synkaBelo(barnId, lokal);
@@ -297,9 +303,11 @@ export default function App() {
   const beloVisad = medJustering(belo, justering);
 
   // Ger barnet en belöning efter ett avklarat förhör eller kortpass.
-  function geBelöning(andel) {
+  // antal = hur många frågor/kort passet hade (behövs för utmaningen "helt utan fel").
+  function geBelöning(andel, antal = 0) {
     const b = hittaBarn(barnId);
-    const { belo: nyVisad, vinst } = belona(beloVisad, b?.belo || "dagar", andel);
+    const sprak = aktivt?.amneTyp === "sprak" || /svenska|engelska|språk/i.test(aktivt?.amneNamn || aktivt?.amne || "");
+    const { belo: nyVisad, vinst } = belona(beloVisad, b?.belo || "dagar", andel, { antal, sprak });
     const ny = { ...nyVisad, samling: (belo.samling || 0) + ((nyVisad.samling || 0) - (beloVisad.samling || 0)) };
     setBelo(ny);
     sparaLagrat(`${prefix}belo-${barnId}`, ny);
@@ -999,7 +1007,7 @@ function BeloAdmin({ barn, belo, stickers, vantar, onAndra }) {
   const [gava, setGava] = useState(barn.belo === "fotboll" ? EXTRA_STICKERS[0].id : "v0");
   useEffect(() => { setAntal(String(totalt)); }, [totalt]);
   const samlar = barn.belo !== "dagar";
-  const u = samlar ? upplasta(barn.belo, totalt) : null;
+  const u = samlar ? upplasta(barn.belo, totalt, b) : null;
   const satt = (n) => onAndra({ typ: "antal", barnId: barn.id, antal: Math.max(0, Math.min(500, n)) });
 
   return (
@@ -1030,6 +1038,18 @@ function BeloAdmin({ barn, belo, stickers, vantar, onAndra }) {
             </div>
           )}
           {u.bonus?.length > 0 && <p className="dov">Bonusstickers: {u.bonus.join(", ")}.</p>}
+          {u.utmaningar && (
+            <div className="adminutm">
+              <strong>Guld- och halostickers ({u.utmaningar.filter((x) => x.klar).length} av {u.utmaningar.length})</strong>
+              {u.utmaningar.map((x) => (
+                <span key={x.id} className={`adminutm-rad${x.klar ? " klar" : ""}`}>
+                  <span className={`utm-marke ${x.sort}`}>{x.sort === "halo" ? "HALO" : "GULD"}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>{x.spelare}: {x.text.toLowerCase()}</span>
+                  <span className="dov">{x.klar ? "Klar ✓" : `${x.nu}/${x.mal}`}</span>
+                </span>
+              ))}
+            </div>
+          )}
           {u.holo > 0 && <p className="dov">Holo-stickers (andra varvet): {u.holo} av {u.max}.</p>}
           {u.varv > 0 && <p className="dov">Hela samlingen är klar {u.varv} {u.varv === 1 ? "gång" : "gånger"}, totalt {totalt}.</p>}
           {b.justering !== 0 && (
@@ -1537,7 +1557,10 @@ function beloKort(barn, belo) {
   if (barn.belo === "djur") return `Mina djur: ${belo.samling || 0}`;
   if (barn.belo === "klister") return `Mina klistermärken: ${belo.samling || 0}`;
   if (barn.belo === "kpop") return `Mina K-pop-stickers: ${Math.min(belo.samling || 0, KPOP.length)} av ${KPOP.length}`;
-  if (barn.belo === "fotboll") return `Mina spelarkort: ${Math.min(belo.samling || 0, SPELARE.length)} av ${SPELARE.length}`;
+  if (barn.belo === "fotboll") {
+    const special = allaUtmaningar(utmaningsLage(belo)).filter((u) => u.klar).length;
+    return `Mina spelarkort: ${Math.min(belo.samling || 0, SPELARE.length)} av ${SPELARE.length} · ★ ${special} av ${GULD.length + HALO.length}`;
+  }
   const d = dagarIRad(belo.dagar || []);
   return `${d} ${d === 1 ? "dag" : "dagar"} i rad`;
 }
@@ -1579,6 +1602,12 @@ function Vinst({ barn, vinst, bilder }) {
           {vinst.nya.map((sp, i) => <SpelarKort key={i} spelare={sp} bild={bilder?.spelare?.[sp[0]]} />)}
         </div>
         <span className="dov">Du har {Math.min(vinst.totalt, SPELARE.length)} av {SPELARE.length} spelare.</span>
+        {(vinst.special || []).map((u) => (
+          <div key={u.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <strong>{u.sort === "halo" ? "Ny halosticker!" : "Ny guldsticker!"} Du klarade: {u.text.toLowerCase()}.</strong>
+            <SpecialKort utmaning={u} bild={bilder?.spelare?.[u.spelare]} ny />
+          </div>
+        ))}
       </div>
     );
   }
@@ -1637,6 +1666,8 @@ function Beloningar({ barn, belo, bilder, egna, onBilder, onTillbaka }) {
             </div>
           )}
           {!andra && <p className="dov">Du har gjort {belo.forhor || 0} förhör och tränat {(belo.dagar || []).length} olika dagar.</p>}
+          {!andra && <Utmaningar belo={belo} bilder={bilder} />}
+          {!andra && <h2>Vanliga spelarkort</h2>}
           <div className="spelargrid">
             {SPELARE.map((sp, i) =>
               andra ? (
@@ -1811,6 +1842,61 @@ function KpopAlbum({ barn, belo, onTillbaka }) {
 }
 
 // Spelarkort i röd/vit Liverpool-stil. Bilden är en som familjen själv valt på mobilen.
+// Guld- och halostickers: specialversioner av de mest kända spelarna som låses upp av utmaningar.
+function SpecialKort({ utmaning, bild = "", last = false, ny = false }) {
+  const sp = spelareMedNamn(utmaning.spelare) || [utmaning.spelare, "", 0, ""];
+  const [namn, position, nummer] = sp;
+  const marke = utmaning.sort === "halo" ? "HALO" : "GULD";
+  if (last) {
+    return (
+      <div className={`spelarkort special ${utmaning.sort} last`} aria-label={`${marke}-sticker, inte upplåst`}>
+        <span className="nummer">?</span>
+        <span className="spmarke">{marke}</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`spelarkort special ${utmaning.sort}${ny ? " ny" : ""}`}>
+      {bild ? <img className="spelarbild" src={bild} alt={namn} /> : <span className="nummer">{nummer || "★"}</span>}
+      <span className="spmarke">{marke}</span>
+      <span className="spnamn">{namn}</span>
+      <span className="spinfo">{position}</span>
+    </div>
+  );
+}
+
+// Verners utmaningar med förlopp. Varje rad: kortet, vad som krävs och hur långt han har kommit.
+function Utmaningar({ belo, bilder }) {
+  const lage = utmaningsLage(belo);
+  const fran = new Date(lage.fran + "T12:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "long" });
+  const grupp = (rubrik, info, lista) => (
+    <div className="kort utmaningar">
+      <h2 style={{ margin: 0 }}>{rubrik} <span className="dov" style={{ fontWeight: 600 }}>{lista.filter((u) => u.klar).length} av {lista.length}</span></h2>
+      <p className="dov" style={{ margin: 0 }}>{info}</p>
+      {lista.map((u) => (
+        <div key={u.id} className={`utmaning${u.klar ? " klar" : ""}`}>
+          <SpecialKort utmaning={u} bild={bilder?.spelare?.[u.spelare]} last={!u.klar} />
+          <div className="utmtext">
+            <strong>{u.klar ? u.spelare : u.rubrik}</strong>
+            <span>{u.text}</span>
+            <div className="forlopp" role="progressbar" aria-valuemin={0} aria-valuemax={u.mal} aria-valuenow={u.nu}>
+              <span style={{ width: `${Math.round((u.nu / u.mal) * 100)}%` }} />
+            </div>
+            <span className="dov">{u.klar ? "Upplåst!" : `${u.nu} av ${u.mal} ${u.enhet}`}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+  return (
+    <>
+      {grupp("Guldstickers", "Klara utmaningen så låses guldkortet upp.", lage.guld)}
+      {grupp("Halostickers", "De svåraste utmaningarna, för de största legendarerna.", lage.halo)}
+      <p className="dov" style={{ fontSize: 12 }}>Utmaningarna räknas från {fran}. Språkpass = pass i svenska, engelska eller andra språk.</p>
+    </>
+  );
+}
+
 function SpelarKort({ spelare, last = false, bild = "" }) {
   const [namn, position, nummer, epok] = spelare;
   if (last) {
@@ -1835,18 +1921,6 @@ function SpelarKort({ spelare, last = false, bild = "" }) {
       <span className="spinfo">{epok}</span>
     </div>
   );
-}
-
-function langstaKedja(dagar) {
-  const s = [...new Set(dagar)].sort();
-  let basta = 0, nu = 0, forra = null;
-  for (const d of s) {
-    const t = new Date(d + "T12:00:00");
-    nu = forra && (t - forra) / 86400000 === 1 ? nu + 1 : 1;
-    basta = Math.max(basta, nu);
-    forra = t;
-  }
-  return basta;
 }
 
 // Bläddrakort: framsida och baksida, "Kunde" eller "Öva mer". Korten man inte kunde kommer tillbaka.
@@ -1888,7 +1962,7 @@ function Bladdrakort({ barn, forhor, bilder, onBelona, onKlar, onFramsteg }) {
     setVand(false);
     setUttal("");
     if (ny.length === 0) {
-      setVinst(onBelona(kunde / totalt + (ok && !forsta.has(nyckel) ? 1 / totalt : 0)));
+      setVinst(onBelona(kunde / totalt + (ok && !forsta.has(nyckel) ? 1 / totalt : 0), totalt));
       setKlar(true);
     }
     setHog(ny);
@@ -2255,7 +2329,7 @@ function Forhor({ barn, kod, forhor, bilder, onKlar, onAvbryt, onBelona, onFrams
 
   function nasta() {
     if (nr + 1 >= fragor.length) {
-      if (onBelona) setVinst(onBelona(antalRatt / fragor.length));
+      if (onBelona) setVinst(onBelona(antalRatt / fragor.length, fragor.length));
       return setKlar(true);
     }
     setTalFel("");

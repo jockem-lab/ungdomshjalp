@@ -285,3 +285,33 @@ body[data-tema="capy"] .fotoyta { border-radius: 28px; }
 .upplast-sak { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 999px; border: 1px solid #E5E7EB; font-size: 13px; font-weight: 600; color: #1F2937; }
 .beloandra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ta-bort-x { background: none; border: 0; color: #6B7280; font-size: 16px; line-height: 1; padding: 0 2px; cursor: pointer; }
+
+/* Verners guld- och halostickers och utmaningar */
+.spelarkort.special { overflow: hidden; }
+.spelarkort.guld { background: linear-gradient(145deg, #B7791F, #FDE68A 45%, #D69E2E); color: #3B2600; box-shadow: 0 0 0 2px #D69E2E; }
+.spelarkort.halo { background: linear-gradient(160deg, #C8102E, #7F1D1D); color: #fff; border-color: #FDE68A; box-shadow: 0 0 0 2px #FDE68A, 0 0 16px rgba(253, 230, 138, 0.85); }
+.spelarkort.halo::before { content: ""; position: absolute; top: 4px; left: 50%; width: 46%; height: 10px; transform: translateX(-50%); border: 3px solid #FDE68A; border-radius: 50%; box-shadow: 0 0 8px #FDE68A; z-index: 1; }
+.spelarkort.special:not(.last)::after { content: ""; position: absolute; inset: -50%; background: linear-gradient(115deg, transparent 38%, rgba(255,255,255,0.6) 48%, transparent 58%); animation: hologlans 3.6s ease-in-out infinite; pointer-events: none; }
+.spelarkort.special.last { background: #F3F4F6; color: #9CA3AF; border: 2px dashed #D1D5DB; box-shadow: none; }
+.spelarkort.special.last.halo::before { border-color: #D1D5DB; box-shadow: none; }
+.spmarke { position: absolute; top: 6px; right: 6px; background: #1F2937; color: #FDE68A; font-size: 9px; font-weight: 800; letter-spacing: 0.08em; border-radius: 999px; padding: 2px 6px; z-index: 2; }
+.spelarkort.special.last .spmarke { background: #E5E7EB; color: #6B7280; }
+.spelarkort.special.ny { animation: popin 0.5s ease-out; }
+@keyframes popin { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.utmaningar { display: flex; flex-direction: column; gap: 12px; }
+.utmaning { display: flex; gap: 12px; align-items: center; }
+.utmaning .spelarkort { width: 84px; min-height: 112px; flex-shrink: 0; padding: 8px 4px; }
+.utmaning .spelarkort .nummer { font-size: 28px; }
+.utmaning .spelarkort .spinfo { display: none; }
+.utmaning .spelarkort .spnamn { font-size: 11px; }
+.utmtext { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.forlopp { height: 10px; background: #F3F4F6; border-radius: 999px; overflow: hidden; }
+.forlopp span { display: block; height: 100%; background: #C8102E; border-radius: 999px; transition: width 0.4s; }
+.utmaning.klar .forlopp span { background: #D69E2E; }
+.adminutm { display: flex; flex-direction: column; gap: 6px; }
+.adminutm-rad { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.adminutm-rad.klar { font-weight: 700; }
+.utm-marke { font-size: 9px; font-weight: 800; letter-spacing: 0.08em; border-radius: 999px; padding: 2px 6px; flex-shrink: 0; }
+.utm-marke.guld { background: #FDE68A; color: #78350F; }
+.utm-marke.halo { background: #7F1D1D; color: #FDE68A; }
+@media (prefers-reduced-motion: reduce) { .spelarkort.special::after, .spelarkort.special.ny { animation: none; } }
